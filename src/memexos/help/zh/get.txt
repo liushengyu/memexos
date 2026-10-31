@@ -1,0 +1,4 @@
+memex get <页面名或路径> [--from 行号] [--lines 行数]
+
+  页面名不用带目录和 .md，例如 memex get 检索重排；也可以给路径，例如 memex get "wiki/topics/检索.md"。
+  长页面用 --from / --lines 分段看。找不到时用 memex search。

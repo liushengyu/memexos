@@ -42,7 +42,7 @@ def vault_files(lang: str) -> dict[str, str]:
 def user_config_text(vault: Path, lang: str) -> str:
     """The commented default config with this vault's path and language filled in."""
     text = config_mod.default_config_text()
-    home = str(Path.home())
+    home = str(Path.home().resolve())
     shown = "~" + str(vault)[len(home):] if str(vault).startswith(home + os.sep) else str(vault)
     text = re.sub(r'(?m)^path = ".*"$', f'path = "{shown}"', text, count=1)
     text = re.sub(r'(?m)^language = ".*"$', f'language = "{lang}"', text, count=1)

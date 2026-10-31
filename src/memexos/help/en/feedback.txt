@@ -1,0 +1,11 @@
+memex feedback <page name or path> --kind incorrect|outdated|missing --why "<reason>" [--evidence "<reliable source>"]
+
+  When: while answering from a page you notice that
+    incorrect  it is wrong: it disagrees with the source it cites, or with facts you verified
+    outdated   it describes an old state of affairs and there is newer information
+    missing    it lacks something it should cover and the question needed
+  Be specific: which sentence, why it is wrong, what is right. Put file paths, links or command output in --evidence.
+
+  What happens: the page is not edited directly. The report is checked against the original sources; if it holds, the fix
+  goes through normal compiling and review. In a read-only environment the report still counts: it stays in the
+  conversation history, which is collected daily.

@@ -152,7 +152,7 @@ class Paths:
 
     @property
     def search_index(self) -> Path:
-        return self.cache / "search" / f"{self.state.name}.sqlite"
+        return self.cache / "search" / f"{vault_id(self.vault)}.sqlite"
 
 
 def vault_id(vault: Path) -> str:

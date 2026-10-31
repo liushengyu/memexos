@@ -1,0 +1,14 @@
+Session snapshots: keeping what a conversation established
+
+  When: a conclusion, decision, pitfall or measurement came out of the conversation, and the person agreed to keep it.
+  Where: $vault/raw/YYYY-MM-DD-session-<claude|codex>-<short-title>.md (new files only; never edit existing ones)
+  Header (frontmatter): source_type: session · platform: claude or codex · title: <one sentence> · captured: <today>
+                        · fetched_via: session-snapshot · sessions: [<session id>] · published: <session date>
+  Body:
+    - start by stating two things: this is not a verbatim record; traceability rests on the sources and re-runnable commands
+    - only distilled conclusions and data: what was decided and why, what happened, what went wrong; drop the dead ends
+    - every number comes with the command, path and date that produced it
+    - anything added from the model's own knowledge and not verified is marked ⚠️ unverified
+    - one topic per snapshot
+    - never include keys, tokens, passwords, cookies or links with credentials
+  That is all: compiling and review run in the background. Details: AGENTS.md §2.1.1 in the knowledge base.

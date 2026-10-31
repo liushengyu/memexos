@@ -72,3 +72,31 @@ admin = """维护命令（一般由定时任务调用，也可以手动运行）
 "run.start" = "开始"
 "run.end" = "结束（{seconds} 秒）"
 "index.update" = "检索索引：新增 {added}、更新 {updated}、删除 {removed}（{seconds} 秒）"
+
+[search]
+fillers = ["为什么", "为啥", "怎么样", "怎么办", "怎么", "如何", "是什么", "是不是", "能不能", "可不可以", "有没有", "有哪些",
+           "哪些", "哪个", "什么", "库里", "我们", "我的", "你的", "一下", "到底", "还是", "就是", "那个", "这个", "那套", "这套",
+           "时候", "现在", "之前", "然后", "如果", "应该", "可以", "需要", "已经", "老是", "明明", "直接", "对吧"]
+header = "「{query}」· 方式 {mode} · 关键词 {keywords} · {seconds} 秒"
+compiled_as = "已编译为 wiki 页：[[{page}]]（优先读它）"
+excerpt = "摘录：{text}"
+nothing = "没有找到。换几个关键词（--kw）或换个说法，或者看 index.md。库里确实没有就如实说。"
+classification = "分类：{domain} · {type} · 证据：{evidence}"
+note = " · 注意：{note}"
+
+[search.kind]
+topics = "主题"
+concepts = "概念"
+entities = "实体"
+sources = "来源"
+raw = "原始来源"
+index = "目录"
+rules = "维护规则"
+other = "其他"
+
+[get]
+not_found = "找不到页面：{page}（用 memex search 找，或看 index.md）"
+header = "# {path}（第 {start}–{end} 行，共 {total} 行）"
+
+[reindex]
+busy = "另一个重建索引的任务在运行，跳过。"

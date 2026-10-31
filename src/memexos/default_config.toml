@@ -88,8 +88,14 @@ include_inbox = false
 
 [search.qmd]
 command = "qmd"
-index = ""          # qmd --index name; empty = qmd's default index
+index = ""          # qmd --index name; empty = "memexos-<vault id>" (kept apart from your other qmd collections)
 collection = "memex"
+# Embedding model for qmd (written into the index config on first `memex reindex`).
+# Empty = qmd's default. For Chinese or Japanese content a multilingual model works much better, e.g.
+# "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf"
+embed_model = ""
+# One sentence describing this knowledge base, given to qmd as collection context.
+context = ""
 
 # ---------------------------------------------------------------------------
 [intake]

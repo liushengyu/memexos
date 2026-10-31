@@ -1,0 +1,12 @@
+memex catalog stats
+memex catalog list [--domain <prefix>] [--type <content type>] [--evidence <evidence>] [--usage <usage>] [-q <words>]
+memex catalog drafts      provisional categories that have not been confirmed yet
+
+  Every source has a classification (standard: .memex/taxonomy.md in the knowledge base):
+    domain: Top/Sub. "Top (provisional: name)" is a category not confirmed yet: read it as the top-level domain
+    content type, level, evidence (first-hand test, official or original author, academic research, third-party report,
+    personal opinion, promotional), usage, durability, and a one-line scope note
+
+  Examples
+    memex catalog list --domain AI --evidence "first-hand test"
+    memex catalog list --type showcase -q 3D

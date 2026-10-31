@@ -1,0 +1,19 @@
+memex search "<question>" [--kw "<keywords…>"] [-n 8] [--mode auto|fast|keyword|vector|deep] [--json] [--inbox]
+
+  auto (default): the question goes to vector search (when qmd is set up) and the keywords to a BM25 keyword index; the two
+  result lists are fused by rank, and the top candidates are reranked by asking whether each page contains the information
+  needed to answer, not merely the same topic. Without qmd it uses the built-in keyword index.
+
+  --kw     2–5 keywords you picked, space separated. Without it they are guessed from the question, usually less precisely
+  -n       how many results (default 8)
+  --mode   fast: fused results without reranking · keyword: keyword index only (milliseconds; works in read-only sandboxes)
+           vector: vector search only · deep: qmd's query expansion + reranker (slowest)
+  --json   output for programs
+  --inbox  also search inbox/ (notes left for people, often outdated; excluded by default)
+
+  Examples
+    memex search "how are vector and keyword results combined" --kw "rank fusion RRF"
+    memex search "what does the reviewer check before publishing" --kw "gate 2 review"
+
+  [topic]/[concept]/[source] is the page kind; [raw source] is a file in raw/, followed by the wiki page it was compiled
+  into: read that page first. The "class" line gives the source's domain, content type, evidence strength and caveats.

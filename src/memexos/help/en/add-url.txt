@@ -1,0 +1,5 @@
+memex add-url <link> [--title <title>] [--via <channel>]
+
+  Puts the link into raw/ according to its kind: videos are transcribed; tweets keep the author's thread and any long-form
+  article; podcast episodes and audio links are transcribed locally; other pages keep their main text (PDFs are converted).
+  Values that look like secrets are replaced before writing. Compiling and review happen automatically afterwards.

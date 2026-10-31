@@ -1,0 +1,5 @@
+memex add-video <link>
+
+  Any site yt-dlp supports. Uses subtitles when available, otherwise downloads the audio and transcribes it locally
+  (whisper.cpp). When the transcript is too thin (no narration, the information is on screen) frames are sampled and read
+  by a vision model into a separate visual companion file.

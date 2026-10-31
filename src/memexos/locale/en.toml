@@ -72,3 +72,32 @@ admin = """Maintenance commands (normally run by the scheduler; you can run them
 "run.start" = "started"
 "run.end" = "finished ({seconds}s)"
 "index.update" = "search index: {added} added, {updated} updated, {removed} removed ({seconds}s)"
+
+[search]
+fillers = ["what", "why", "how", "which", "who", "whom", "when", "where", "does", "do", "did", "is", "are", "was", "were", "be",
+           "been", "the", "a", "an", "of", "in", "on", "for", "to", "with", "about", "can", "could", "should", "would", "will",
+           "our", "my", "your", "we", "i", "you", "it", "its", "this", "that", "these", "those", "there", "any", "have", "has",
+           "had", "and", "or", "if", "then", "than", "from", "by", "at", "as", "into", "know", "tell", "me", "us", "please"]
+header = "\"{query}\" · mode {mode} · keywords {keywords} · {seconds}s"
+compiled_as = "compiled into wiki page [[{page}]] (read that first)"
+excerpt = "excerpt: {text}"
+nothing = "Nothing found. Try other keywords (--kw) or wording, or read index.md. If the knowledge base really has nothing, say so."
+classification = "class: {domain} · {type} · evidence: {evidence}"
+note = " · note: {note}"
+
+[search.kind]
+topics = "topic"
+concepts = "concept"
+entities = "entity"
+sources = "source"
+raw = "raw source"
+index = "index"
+rules = "rules"
+other = "other"
+
+[get]
+not_found = "No page named {page} (try memex search, or read index.md)"
+header = "# {path} (lines {start}–{end} of {total})"
+
+[reindex]
+busy = "Another reindex is running; skipped."

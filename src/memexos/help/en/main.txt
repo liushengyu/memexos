@@ -1,0 +1,39 @@
+memex: the command line of a knowledge base ($vault). Any agent uses it to search the knowledge base and to put things into it.
+
+When to use it
+  When a question touches what this knowledge base covers ($domains), or what its owner has worked on, decided or learned,
+  search first and answer from it. If it has nothing, say so, answer from your own knowledge, and say which part is not from it.
+
+Search
+  memex search "<question>" --kw "<2–5 keywords>"
+      Finds pages and returns their kind, classification and an excerpt. Pick the keywords yourself (names, terms):
+      that works better than the question alone. Nothing found: try other keywords or other wording.
+  memex get <page name or path>
+      One page in full. Pages live in wiki/: topics (overviews, start there), concepts, entities (people, tools),
+      sources (one summary per source).
+  memex catalog list --domain <domain> --evidence <evidence>
+      Filter sources by domain and evidence strength (memex catalog stats lists the domains).
+  memex feedback <page> --kind incorrect|outdated|missing --why "<reason>"
+      Report a page that is wrong, outdated or missing something you needed (add --evidence "<source>" when you have one).
+      Reports are checked against the original sources before anything changes.
+
+Add things (only into raw/; compiling and review happen automatically)
+  memex add-url <link>     articles, tweets, podcasts, videos
+  memex add-video <link>   videos (subtitles when available, otherwise local transcription)
+  A conclusion, decision, pitfall or measurement worth keeping came out of your conversation: ask the person whether to
+  keep it, and if they agree write a session snapshot (format: memex help snapshot).
+
+Rules for answering
+  1. Cite: say which page you used (wiki/…). Key facts can be traced through the page's Sources section to raw/.
+  2. Copy numbers, units, names and quotes exactly as the page has them.
+  3. Do not overstate: a page saying "target about 95%" does not mean "measured 95%"; "most" does not mean "all".
+  4. Word claims by the source's evidence strength (page frontmatter `evidence`): first-hand tests, official or original
+     authors and academic research can support facts (say who, under what conditions); a third-party report becomes
+     "according to …"; a personal opinion becomes "the author thinks"; promotional material is not evidence.
+     Keep "⚠️ unverified" and "(compiler's inference)" markers when you repeat such text; date short-lived facts.
+  5. Do not edit wiki/ or index.md directly (they go through compiling and review); use memex feedback to report problems.
+
+More
+  memex <command> --help   options and examples (search, get, catalog, add-url, add-video, feedback, usage)
+  memex help snapshot      how to write a session snapshot
+  memex help admin         maintenance commands (compiling, review, collection, status), usually run by the scheduler

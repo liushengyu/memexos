@@ -1,0 +1,11 @@
+memex catalog stats
+memex catalog list [--domain 前缀] [--type 内容类型] [--evidence 证据强度] [--usage 用途] [-q 关键词]
+memex catalog drafts      暂定分类（还没经确认的新分类）的现状
+
+  每份来源都有一条分类（标准在知识库的 .memex/taxonomy.md）：
+    领域：一级/二级。写成「一级（暂定：名字）」的是还没经确认的新分类，按一级领域理解
+    内容类型、专业程度、证据强度（一手实测、官方或原作者、学术研究、第三方转述、个人经验观点、营销推广）、用途、时效，以及一句适用边界
+
+  例子
+    memex catalog list --domain AI --evidence 一手实测
+    memex catalog list --type 作品展示 -q 3D
