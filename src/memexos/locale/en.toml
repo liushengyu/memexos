@@ -1,0 +1,74 @@
+[cli]
+no_vault = "No knowledge base at {path}. Create one with: memex init {path}"
+unknown = "Unknown command: {cmd} (memex help admin lists them)"
+not_yet = "`memex {cmd}` is not available in this build yet."
+
+[init]
+exists = "{path} already contains files; adding only what is missing."
+created = "Created knowledge base at {path}"
+config_written = "Wrote your settings to {path}"
+config_kept = "Kept your existing settings in {path}"
+git_init = "Initialized a git repository (every automatic change is a commit you can roll back)."
+next = """
+Next steps:
+  memex doctor              check which tools and models are available
+  memex add-url <link>      put your first source into raw/
+  memex ingest              compile it into the wiki (runs on its own once scheduled)
+  memex search "<question>" --kw "<keywords>"
+  memex schedule install    run collection, compiling and indexing automatically"""
+
+[doctor]
+title = "MemexOS doctor"
+ok = "ok"
+missing = "missing"
+optional = "optional"
+section_core = "Core"
+section_models = "Models"
+section_search = "Search"
+section_capture = "Capture"
+section_schedule = "Scheduling"
+python = "Python {version}"
+git = "git"
+vault = "knowledge base at {path}"
+vault_missing = "no knowledge base at {path} (memex init)"
+config = "settings: {sources}"
+state = "state directory {path}"
+backend_cli = "{name}: command `{cmd}`"
+backend_api = "{name}: API key from {env}"
+role = "{role} → {chain}"
+role_none = "{role}: none of [{chain}] is available"
+judge = "judge: {backend}"
+search_fts = "built-in full-text index ({docs} documents)"
+search_qmd = "qmd (vector search + local reranker)"
+tool = "{name}"
+asr_model = "transcription model {path}"
+scheduler = "scheduler: {backend}"
+hint_install = "install: {hint}"
+summary_ok = "Everything required is available."
+summary_missing = "{n} required item(s) missing; see above."
+
+[help]
+admin = """Maintenance commands (normally run by the scheduler; you can run them by hand)
+
+  memex init [path]            create a knowledge base and your settings
+  memex doctor                 check tools, models and settings
+  memex config show|path       show the effective settings / where they live
+  memex status [-w]            what is running, what finished today, what needs attention
+  memex ingest                 compile new raw files into the wiki (gates 1 and 2, then publish)
+  memex lint                   weekly health check
+  memex fix                    repair problems found by review
+  memex correct                apply feedback from raw/feedback/
+  memex intake [--source ...]  collect from enabled sources and decide what to keep
+  memex add-url | add-video | add-visual
+  memex catalog stats|list|drafts|sync|backlog
+  memex inbox stats|list|triage|apply
+  memex reindex                rebuild the search index
+  memex usage                  how the knowledge base is being used
+  memex console                local web console
+  memex schedule install|remove|list
+  memex eval retrieval|gate2   measure search and review quality"""
+
+[event]
+"run.start" = "started"
+"run.end" = "finished ({seconds}s)"
+"index.update" = "search index: {added} added, {updated} updated, {removed} removed ({seconds}s)"

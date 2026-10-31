@@ -1,0 +1,213 @@
+# MemexOS configuration.
+#
+# Lookup order (later wins): built-in defaults (this file) < <vault>/.memex/config.toml
+# < ~/.config/memexos/config.toml (or $MEMEX_CONFIG) < environment variables.
+# Any key can be overridden from the environment as MEMEX_<SECTION>__<KEY>, for
+# example MEMEX_SEARCH__RERANK=none. Secrets are never stored here: settings
+# such as api_key_env name the environment variable that holds the secret.
+
+# Language of prompts, logs, the console and taxonomy labels: "en" or "zh".
+language = "en"
+
+[vault]
+# The knowledge base: a git repository with raw/, wiki/, index.md, log.md.
+# Override with $MEMEX_VAULT.
+path = "~/memex"
+
+[paths]
+# Empty = default. state: logs, events, locks, staging worktrees, review
+# artifacts ($XDG_STATE_HOME/memexos/<vault-id>). cache: search index, models
+# ($XDG_CACHE_HOME/memexos).
+state = ""
+cache = ""
+
+# ---------------------------------------------------------------------------
+# Models. Each role lists backends in order of preference; when one reports an
+# exhausted quota, the next one is used for a while.
+[models]
+# Agentic work that edits the wiki inside a staging worktree.
+writer = ["claude-code"]
+# Gate 2, the independent review. Prefer a different model family from the writer.
+reviewer = ["codex", "claude-code"]
+# Smaller structured jobs: classification, inbox triage, admission, usage judging.
+worker = ["claude-code"]
+# Reading video frames.
+vision = ["codex", "claude-code"]
+
+[backends.claude-code]
+command = "claude"
+model = ""          # empty = the CLI's default model
+effort = "high"
+proxy = ""          # empty = inherit the environment; "direct" = no proxy; or a URL
+
+[backends.codex]
+command = "codex"
+model = ""
+effort = "high"
+proxy = ""
+
+[backends.anthropic]
+api_key_env = "ANTHROPIC_API_KEY"
+base_url = "https://api.anthropic.com"
+model = ""
+proxy = ""
+
+[backends.openai]
+# Any OpenAI-compatible chat completions endpoint.
+api_key_env = "OPENAI_API_KEY"
+base_url = "https://api.openai.com/v1"
+model = ""
+proxy = ""
+
+# ---------------------------------------------------------------------------
+# The judge answers small, fixed-format questions fast and cheaply: "is this
+# sentence supported by this passage?", "which of these categories fits?",
+# "how much does this pending decision matter?". It powers the self-check
+# before review, the first-pass category screen and inbox ranking.
+[judge]
+backend = "llm"     # llm (uses the worker models) | jev | none
+
+[judge.jev]
+# Jev, a hosted decision model (https://typesafe.ai). Enabling it sends the
+# sentences and source excerpts being judged to that service.
+url = "https://api.typesafe.ai/v1/systemone"
+model = "jev-latest"
+api_key_env = "JEV_API_KEY"
+proxy = ""
+
+# ---------------------------------------------------------------------------
+[search]
+# auto = qmd when it is installed and the vault is indexed, else the built-in
+# SQLite full-text index. fts = always the built-in index.
+backend = "auto"
+# Reorder the top candidates: none | qmd (local Qwen3 reranker shipped with
+# qmd) | llm (worker models) | jev.
+rerank = "auto"
+candidates = 20
+include_inbox = false
+
+[search.qmd]
+command = "qmd"
+index = ""          # qmd --index name; empty = qmd's default index
+collection = "memex"
+
+# ---------------------------------------------------------------------------
+[intake]
+# Collectors that run on `memex intake`. Built in: sessions (Claude Code and
+# Codex chats), docs (documents written during those chats), rss.
+# Plugins (off by default, need a logged-in browser): bilibili, x.
+sources = ["sessions", "rss"]
+since_days = 30
+idle_hours = 6
+batch_chars = 400000
+batch_max = 6
+
+[intake.sessions]
+claude_dir = "~/.claude/projects"
+codex_dir = "~/.codex/sessions"
+# Directories that contain your projects. Documents written during a chat are
+# only copied into the vault when they live under one of these.
+project_roots = ["~/src", "~/projects", "~/code", "~/Documents"]
+
+[intake.rss]
+feeds_file = ".memex/feeds.txt"
+
+[plugins.bilibili]
+enabled = false
+browser = "chrome"  # where to export the login cookie from
+proxy = "direct"
+
+[plugins.x]
+enabled = false
+browser = "chrome"
+proxy = ""
+likes = true
+
+[plugins.youtube]
+browser = ""        # export a login cookie for YouTube; empty = anonymous
+proxy = ""
+
+# ---------------------------------------------------------------------------
+[fetch]
+# How web pages are turned into text: direct (fetch and convert locally) or
+# jina (https://r.jina.ai, a hosted reader; sends the URL to that service).
+reader = "direct"
+proxy = ""
+# Some local proxies resolve every hostname to a fake address in 198.18.0.0/15.
+# Allow those addresses through the private-network guard.
+allow_fake_ip = false
+
+[asr]
+backend = "whisper-cpp"   # whisper-cpp | none
+command = "whisper-cli"
+model = ""                # path to a ggml model file, e.g. ggml-large-v3-turbo-q5_0.bin
+chunk_seconds = 300
+
+[visual]
+daily_max = 20
+effort = "xhigh"
+
+# ---------------------------------------------------------------------------
+[privacy]
+# Values of these environment variables (shell-style patterns on the name) are
+# scrubbed from anything written into the vault.
+redact_env = ["*_TOKEN", "*_KEY", "*_SECRET", "*_PASSWORD", "*_API_KEY"]
+# Extra files whose values are scrubbed (KEY=VALUE lines or one secret per line).
+redact_files = []
+# Directories the local-check agent may read besides the vault (it never gets
+# your whole home directory).
+investigate_roots = []
+
+# ---------------------------------------------------------------------------
+[pipeline]
+ingest_batch = 3
+gate1_fix_rounds = 2
+gate2 = "enforce"         # enforce | off (only for debugging)
+gate2_fix_rounds = 2
+selfcheck = "on"
+fix_max_reviews = 4
+correct_max = 6
+
+[taxonomy]
+# A draft category is put to you for approval once it has at least min_works
+# distinct works from min_days distinct capture days, and a blind re-check
+# puts at least min_stable of them back into it.
+min_works = 8
+min_days = 3
+min_stable = 0.8
+expire_days = 60
+max_drafts_per_top = 5
+# The judge's first-pass screen decides a domain on its own only when the top
+# category's probability >= judge_min_top, "none fits" <= judge_max_none, and
+# the scope check >= judge_min_scope. Otherwise the worker model decides.
+judge_min_top = 0.9
+judge_max_none = 0.1
+judge_min_scope = 0.8
+# A proposed draft is merged into an existing category judged the same topic
+# with at least this confidence.
+synonym_min = 0.5
+
+[inbox]
+apply_max = 8
+research_max = 8
+investigate_max = 6
+investigate_min_score = 0.75
+expire_days = 30
+
+# ---------------------------------------------------------------------------
+[schedule]
+backend = "auto"          # auto | launchd | systemd | cron | none
+label_prefix = "io.memexos"
+reindex_minutes = 15
+ingest_minutes = 60
+intake_at = "03:17"
+lint_at = "sun 21:07"
+# What runs after the daily intake, in order. Remove steps you do not want.
+nightly = ["visual", "classify", "catalog-sync", "eval-cover", "usage-judge", "usage-verify",
+           "fix", "inbox-triage", "inbox-apply"]
+
+[console]
+host = "127.0.0.1"
+port = 8765
+# Show what your coding agents remember about you (Claude Code auto-memory).
+profile_page = false

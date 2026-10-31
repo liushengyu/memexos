@@ -1,0 +1,9 @@
+# Editor and OS state
+.obsidian/workspace*.json
+.obsidian/cache
+.DS_Store
+.trash/
+# Files being written (written to a hidden temp file first, then renamed)
+raw/.*.tmp
+**/.*.tmp
+__pycache__/

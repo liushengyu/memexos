@@ -1,0 +1,74 @@
+[cli]
+no_vault = "{path} 还没有知识库。用这条命令建一个：memex init {path}"
+unknown = "未知命令：{cmd}（memex help admin 列出全部命令）"
+not_yet = "这个版本还没有 `memex {cmd}`。"
+
+[init]
+exists = "{path} 里已经有文件，只补齐缺的部分。"
+created = "已在 {path} 建好知识库"
+config_written = "你的设置写在 {path}"
+config_kept = "保留了你已有的设置 {path}"
+git_init = "已初始化 git 仓库（每一次自动改动都是一个可以回滚的提交）。"
+next = """
+接下来：
+  memex doctor              看看哪些工具和模型可用
+  memex add-url <链接>      往 raw/ 放第一份资料
+  memex ingest              把它编译进 wiki（装好定时任务后会自动跑）
+  memex search "<问题>" --kw "<关键词>"
+  memex schedule install    让采集、编译、建索引自动运行"""
+
+[doctor]
+title = "MemexOS 体检"
+ok = "可用"
+missing = "缺少"
+optional = "可选"
+section_core = "基础"
+section_models = "模型"
+section_search = "检索"
+section_capture = "采集"
+section_schedule = "定时任务"
+python = "Python {version}"
+git = "git"
+vault = "知识库 {path}"
+vault_missing = "{path} 还没有知识库（memex init）"
+config = "设置来源：{sources}"
+state = "运行状态目录 {path}"
+backend_cli = "{name}：命令 `{cmd}`"
+backend_api = "{name}：API 密钥来自 {env}"
+role = "{role} → {chain}"
+role_none = "{role}：[{chain}] 里没有一个可用"
+judge = "判断模型：{backend}"
+search_fts = "内置全文索引（{docs} 份文档）"
+search_qmd = "qmd（向量检索 + 本地重排模型）"
+tool = "{name}"
+asr_model = "转写模型 {path}"
+scheduler = "定时任务：{backend}"
+hint_install = "安装：{hint}"
+summary_ok = "必需的都齐了。"
+summary_missing = "缺 {n} 项必需的，见上面。"
+
+[help]
+admin = """维护命令（一般由定时任务调用，也可以手动运行）
+
+  memex init [路径]            建知识库和你的设置
+  memex doctor                 检查工具、模型和设置
+  memex config show|path       看生效的设置 / 设置文件在哪
+  memex status [-w]            在做什么、今天做完了什么、有什么要注意
+  memex ingest                 把新的 raw 编译进 wiki（过门 1、门 2 才发布）
+  memex lint                   每周体检
+  memex fix                    修复审校发现的问题
+  memex correct                按 raw/feedback/ 里的反馈更正
+  memex intake [--source ...]  从启用的渠道采集，决定收不收
+  memex add-url | add-video | add-visual
+  memex catalog stats|list|drafts|sync|backlog
+  memex inbox stats|list|triage|apply
+  memex reindex                重建检索索引
+  memex usage                  知识库被怎么用
+  memex console                本机网页控制台
+  memex schedule install|remove|list
+  memex eval retrieval|gate2   测检索和审校的质量"""
+
+[event]
+"run.start" = "开始"
+"run.end" = "结束（{seconds} 秒）"
+"index.update" = "检索索引：新增 {added}、更新 {updated}、删除 {removed}（{seconds} 秒）"

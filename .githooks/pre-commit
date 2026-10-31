@@ -1,0 +1,17 @@
+#!/bin/sh
+# Refuse commits that contain secrets or personal details, or that would be
+# authored with a private e-mail address. Enable with:
+#   git config core.hooksPath .githooks
+set -e
+root=$(git rev-parse --show-toplevel)
+email=$(git config user.email || true)
+case "$email" in
+  *@users.noreply.github.com|"") ;;
+  *)
+    if [ -z "${MEMEX_ALLOW_EMAIL:-}" ]; then
+      echo "pre-commit: commit e-mail is not a GitHub noreply address. Set a repo-local one:" >&2
+      echo "  git config user.email <id>+<user>@users.noreply.github.com   (or MEMEX_ALLOW_EMAIL=1 to override)" >&2
+      exit 1
+    fi ;;
+esac
+exec python3 "$root/tools/leak_scan.py" --staged

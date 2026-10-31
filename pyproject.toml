@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "memexos"
+version = "0.1.0.dev0"
+description = "A memory OS for you and your agents: agents compile what you collect into a verified, searchable wiki."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "The MemexOS Authors" }]
+keywords = ["knowledge-base", "agents", "llm", "wiki", "memory", "rag"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Text Processing :: Markup :: Markdown",
+]
+# The core uses only the Python standard library. Everything heavier is an
+# optional external tool (detected at runtime by `memex doctor`).
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+memex = "memexos.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/memexos"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

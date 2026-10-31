@@ -1,0 +1,6 @@
+# Append-only files: on a merge conflict keep both sides. The compiler appends
+# to them in a staging worktree while the main branch may append at the same time.
+log.md merge=union
+inbox/** merge=union
+.memex/*.txt merge=union
+.memex/*.jsonl merge=union
