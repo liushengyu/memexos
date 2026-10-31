@@ -43,7 +43,7 @@ search_qmd = "qmd (vector search + local reranker)"
 tool = "{name}"
 asr_model = "transcription model {path}"
 scheduler = "scheduler: {backend}"
-hint_install = "install: {hint}"
+hint_install = "→ {hint}"
 summary_ok = "Everything required is available."
 summary_missing = "{n} required item(s) missing; see above."
 

@@ -27,6 +27,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+anthropic = ["anthropic>=1.0"]
 
 [project.scripts]
 memex = "memexos.cli:main"

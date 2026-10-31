@@ -43,7 +43,7 @@ search_qmd = "qmd（向量检索 + 本地重排模型）"
 tool = "{name}"
 asr_model = "转写模型 {path}"
 scheduler = "定时任务：{backend}"
-hint_install = "安装：{hint}"
+hint_install = "→ {hint}"
 summary_ok = "必需的都齐了。"
 summary_missing = "缺 {n} 项必需的，见上面。"
 

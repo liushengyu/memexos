@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor
 from importlib import resources
 from pathlib import Path
 
@@ -60,13 +59,8 @@ def judge_scores(cfg, query: str, texts: list[str], backend: str) -> dict[int, f
     except ImportError:
         return None
     try:
-        j = judge.get(cfg, backend)
-        if backend == "jev":
-            with ThreadPoolExecutor(12) as ex:
-                probs = list(ex.map(lambda t: j.yes_no({"question": query, "candidate": t}, INSTRUCTION), texts))
-            return {i: p for i, p in enumerate(probs) if p is not None} or None
-        return j.relevance(query, texts, INSTRUCTION)
-    except Exception:  # noqa: BLE001
+        return judge.get(cfg, backend).relevance(query, texts, INSTRUCTION)
+    except Exception:  # noqa: BLE001 — unavailable judge or network trouble: keep the fused order
         return None
 
 

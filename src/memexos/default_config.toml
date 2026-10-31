@@ -39,25 +39,28 @@ command = "claude"
 model = ""          # empty = the CLI's default model
 effort = "high"
 proxy = ""          # empty = inherit the environment; "direct" = no proxy; or a URL
+# After a backend reports an exhausted quota, skip it for this long, then try again.
+retry_after_minutes = 60
+# Unattended runs skip your Claude Code user settings (hooks, plugins). If your API access is configured
+# through the "env" block of ~/.claude/settings.json (gateway URL, token, proxy), set this to true to pass
+# just that block to the runs.
+settings_env = false
 
 [backends.codex]
 command = "codex"
 model = ""
 effort = "high"
 proxy = ""
+retry_after_minutes = 60
 
 [backends.anthropic]
+# The Claude API through the official SDK (pip install "memexos[anthropic]"), for machines without the
+# Claude Code or Codex command lines. MemexOS runs the agent loop and enforces file permissions itself.
 api_key_env = "ANTHROPIC_API_KEY"
-base_url = "https://api.anthropic.com"
-model = ""
+base_url = ""       # empty = the SDK default
+model = ""          # empty = claude-opus-5
 proxy = ""
-
-[backends.openai]
-# Any OpenAI-compatible chat completions endpoint.
-api_key_env = "OPENAI_API_KEY"
-base_url = "https://api.openai.com/v1"
-model = ""
-proxy = ""
+retry_after_minutes = 60
 
 # ---------------------------------------------------------------------------
 # The judge answers small, fixed-format questions fast and cheaply: "is this
