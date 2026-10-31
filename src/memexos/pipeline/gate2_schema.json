@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["key_points", "claims", "overwrites", "injections", "integration_notes", "notes_on_eval"],
+  "properties": {
+    "key_points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["point", "importance", "covered", "where"],
+        "properties": {
+          "point": {"type": "string"},
+          "importance": {"type": "string", "enum": ["critical", "must", "nice"]},
+          "covered": {"type": "boolean"},
+          "where": {"type": "string"}
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page", "claim", "critical", "verdict", "evidence", "raw_location", "reason"],
+        "properties": {
+          "page": {"type": "string"},
+          "claim": {"type": "string"},
+          "critical": {"type": "boolean"},
+          "verdict": {"type": "string", "enum": ["SUPPORTED", "PARTIAL", "UNSUPPORTED", "CONTRADICTED", "MARKED"]},
+          "evidence": {"type": "string"},
+          "raw_location": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "overwrites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page", "old_text", "new_text", "substantive", "backed_by_source", "disclosed", "reason"],
+        "properties": {
+          "page": {"type": "string"},
+          "old_text": {"type": "string"},
+          "new_text": {"type": "string"},
+          "substantive": {"type": "boolean"},
+          "backed_by_source": {"type": "boolean"},
+          "disclosed": {"type": "boolean"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "injections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["raw_text", "complied", "where", "reason"],
+        "properties": {
+          "raw_text": {"type": "string"},
+          "complied": {"type": "boolean"},
+          "where": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "integration_notes": {"type": "array", "items": {"type": "string"}},
+    "notes_on_eval": {"type": "string"}
+  }
+}

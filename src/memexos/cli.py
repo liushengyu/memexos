@@ -25,6 +25,12 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "get": ("memexos.search.cli", "cmd_get"),
     "reindex": ("memexos.search.cli", "cmd_reindex"),
     "secret": ("memexos.cli", "cmd_secret"),
+    "ingest": ("memexos.pipeline.compile", "cmd_ingest"),
+    "lint": ("memexos.pipeline.compile", "cmd_lint"),
+    "fix": ("memexos.pipeline.compile", "cmd_fix"),
+    "correct": ("memexos.pipeline.compile", "cmd_correct"),
+    "pause": ("memexos.cli", "cmd_pause"),
+    "resume": ("memexos.cli", "cmd_resume"),
 }
 
 
@@ -76,6 +82,20 @@ def cmd_secret(cfg_loader, argv: list[str]) -> int:
         return 0 if ok else 1
     value = getpass.getpass(f"{a.name}: ")
     print(f"stored in {credentials.put(a.name, value)}")
+    return 0
+
+
+def cmd_pause(cfg_loader, argv: list[str]) -> int:
+    cfg = cfg_loader(None)
+    cfg.paths.state.mkdir(parents=True, exist_ok=True)
+    (cfg.paths.state / "PAUSE").write_text(" ".join(argv) or "paused by hand\n")
+    print(i18n.t("pipeline.paused", path=cfg.paths.state / "PAUSE"))
+    return 0
+
+
+def cmd_resume(cfg_loader, argv: list[str]) -> int:
+    cfg = cfg_loader(None)
+    (cfg.paths.state / "PAUSE").unlink(missing_ok=True)
     return 0
 
 

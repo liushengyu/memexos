@@ -1,0 +1,155 @@
+"""End-to-end compile pipeline with scripted stand-in models: no network, no cost."""
+
+import json
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from memexos import backends, config, scaffold
+from memexos.backends.base import Backend, Result
+from memexos.pipeline import compile as C
+from memexos.pipeline.stage import ledger
+
+
+def git(v, *a):
+    return subprocess.run(["git", "-C", str(v), *a], capture_output=True, text=True).stdout
+
+
+class FakeWriter(Backend):
+    """Writes a source page for every raw file named in the prompt; `mode` scripts misbehaviour."""
+    name = "fake-writer"
+    mode = "good"
+    calls = []
+
+    def available(self):
+        return True, ""
+
+    def agent(self, prompt, *, cwd, workdir, policy, **kw):
+        cwd = Path(cwd)
+        FakeWriter.calls.append(prompt[:60])
+        if FakeWriter.mode == "touch-raw":
+            (cwd / "raw" / "evil.md").write_text("x")
+        for raw in re.findall(r"^- (raw/\S+\.md)", prompt, re.M):
+            name = Path(raw).stem.split("-", 4)[-1]
+            page = cwd / "wiki" / "sources" / f"{name}.md"
+            page.write_text(f"# {name}\n\nA summary of the source that is long enough to count as a page body for gate one.\n\n"
+                            f"## Sources\n\n- `{raw}`\n")
+            idx = cwd / "index.md"
+            idx.write_text(idx.read_text() + f"\n- [[{name}]] — summary\n")
+            with open(cwd / "log.md", "a") as f:
+                f.write(f"\n## [2026-01-01] ingest | {name}\n")
+        if "fix" in prompt[:400].lower() or "problems below" in prompt or "were found" in prompt:
+            with open(cwd / "log.md", "a") as f:
+                f.write("\n## [2026-01-01] lint | fixed\n")
+            for p in (cwd / "wiki" / "sources").glob("*.md"):
+                p.write_text(p.read_text().replace("long enough", "long enough (fixed)"))
+        return Result(ok=True, backend=self.name, text="done")
+
+
+class FakeReviewer(Backend):
+    name = "fake-reviewer"
+    script: list = []
+
+    def available(self):
+        return True, ""
+
+    def structured(self, prompt, schema, **kw):
+        outcome = FakeReviewer.script.pop(0) if FakeReviewer.script else "pass"
+        if outcome == "down":
+            return Result(ok=False, backend=self.name, limited=True, tail="usage limit reached")
+        claim = {"page": "wiki/sources/x.md", "claim": "c", "critical": True, "evidence": "e", "raw_location": "raw/x.md:1",
+                 "reason": "r", "verdict": "SUPPORTED" if outcome == "pass" else "UNSUPPORTED"}
+        return Result(ok=True, backend=self.name, result={"key_points": [], "claims": [claim], "overwrites": [], "injections": [],
+                                                          "integration_notes": [], "notes_on_eval": "none"})
+
+
+@pytest.fixture
+def vault(home, monkeypatch):
+    v = home / "memex"
+    scaffold.init(v, lang="en", write_user_config=False)
+    monkeypatch.setenv("MEMEX_VAULT", str(v))
+    monkeypatch.setattr(backends, "REGISTRY", {"fake-writer": FakeWriter, "fake-reviewer": FakeReviewer})
+    monkeypatch.setattr(C.time, "sleep", lambda s: None)
+    monkeypatch.setattr("memexos.pipeline.stage.reindex_in_background", lambda cfg: None)
+    FakeWriter.mode, FakeWriter.calls, FakeReviewer.script = "good", [], []
+    for i in (1, 2):
+        (v / "raw" / f"2026-01-0{i}-web-example-source{i}.md").write_text(
+            f"---\nsource_type: web\ntitle: Source {i}\n---\n# Source {i}\n\nFacts.\n")
+    return v
+
+
+def cfg_for(v):
+    cfg = config.load(v)
+    cfg.data["models"].update(writer=["fake-writer"], reviewer=["fake-reviewer"])
+    cfg.data["judge"]["backend"] = "none"
+    return cfg
+
+
+def test_ingest_publishes_reviewed_batch(vault):
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 0
+    assert (vault / "wiki" / "sources" / "example-source1.md").exists()          # merged into the vault itself
+    assert ledger(vault, "ingested.txt") == {"raw/2026-01-01-web-example-source1.md", "raw/2026-01-02-web-example-source2.md"}
+    assert not cfg.paths.staging.exists()                                 # worktree cleaned up
+    log = git(vault, "log", "--format=%s")
+    assert "auto-ingest:" in log and "capture:" in log
+    assert "staging/" not in git(vault, "branch")
+    review = next((vault / "inbox").glob("*-review.md")).read_text()
+    assert "No problems found" in review
+
+
+def test_review_failure_goes_back_to_writer_then_publishes(vault):
+    FakeReviewer.script = ["fail", "pass"]
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 0
+    assert any("independent reviewer" in c for c in FakeWriter.calls)     # the problems went back to the writer
+    assert ledger(vault, "ingested.txt")
+    assert len(ledger(vault, "fixed-reviews.txt")) == 1                   # the failed round was handled by the rework
+
+
+def test_writing_into_raw_is_held_not_published(vault):
+    FakeWriter.mode = "touch-raw"
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 1
+    assert not (vault / "raw" / "evil.md").exists()
+    assert len(ledger(vault, "held.txt")) == 2
+    blocked = next((vault / "inbox").glob("*-blocked.md")).read_text()
+    assert "staging/" in blocked and "staging/" in git(vault, "branch")   # branch kept for a person to inspect
+
+
+def test_review_unavailable_discards_and_waits(vault):
+    FakeReviewer.script = ["down"]
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 1
+    assert not ledger(vault, "ingested.txt") and not ledger(vault, "held.txt")   # still queued
+    assert (cfg.paths.state / "gate2-unavailable.json").exists()
+    assert C.ingest(cfg) == 0 and "ingest.waiting" in (cfg.paths.state / "events.jsonl").read_text()
+
+
+def test_pause(vault):
+    cfg = cfg_for(vault)
+    (cfg.paths.state).mkdir(parents=True, exist_ok=True)
+    (cfg.paths.state / "PAUSE").write_text("x")
+    assert C.ingest(cfg) == 0 and not ledger(vault, "ingested.txt")
+
+
+def test_fix_repairs_minor_problems_of_published_batches(vault, monkeypatch):
+    cfg = cfg_for(vault)
+    # a passing review that still lists a minor (PARTIAL) problem
+    def partial(self, prompt, schema, **kw):
+        claim = {"page": "wiki/sources/example-source1.md", "claim": "c", "critical": False, "evidence": "e", "raw_location": "raw/x.md:1",
+                 "reason": "rounded a number", "verdict": "PARTIAL"}
+        return Result(ok=True, backend=self.name, result={"key_points": [], "claims": [claim], "overwrites": [], "injections": [],
+                                                          "integration_notes": [], "notes_on_eval": ""})
+    monkeypatch.setattr(FakeReviewer, "structured", partial)
+    assert C.ingest(cfg) == 0
+    pending = C.unfixed_reviews(cfg)
+    assert len(pending) == 1
+    monkeypatch.setattr(FakeReviewer, "structured", lambda self, p, s, **kw: Result(ok=True, backend=self.name, result={
+        "key_points": [], "claims": [], "overwrites": [], "injections": [], "integration_notes": [], "notes_on_eval": ""}))
+    assert C.fix(cfg) == 0
+    assert not C.unfixed_reviews(cfg)
+    assert "(fixed)" in (vault / "wiki" / "sources" / "example-source1.md").read_text()
+    assert "fix:" in git(vault, "log", "-1", "--format=%s")
