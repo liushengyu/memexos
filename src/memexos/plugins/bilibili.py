@@ -10,11 +10,10 @@ from __future__ import annotations
 import datetime
 import json
 import time
-import urllib.request
 
 from memexos import i18n
 from memexos.capture import cookies
-from memexos.capture.fetch import UA, PageUnavailable, opener, proxy_for
+from memexos.capture.fetch import PageUnavailable, get, proxy_for
 from memexos.util import proxy_env, run, which
 
 NAME = "bilibili"
@@ -26,8 +25,8 @@ ADMISSION = {
 
 
 def _get(cfg, url: str, cookie: str) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": "https://www.bilibili.com", "Cookie": cookie})
-    return json.load(opener(proxy_for(cfg, "https://www.bilibili.com")).open(req, timeout=20))
+    return json.loads(get(cfg, url, {"Referer": "https://www.bilibili.com", "Cookie": cookie}, timeout=20,
+                          proxy_url="https://www.bilibili.com").data)
 
 
 def _jar(cfg) -> dict:

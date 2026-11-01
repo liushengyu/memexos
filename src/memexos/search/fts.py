@@ -23,7 +23,7 @@ from pathlib import Path
 from memexos.search import text as T
 from memexos.util import split_frontmatter
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2          # 2: Porter stemming for words (box / boxes, invent / invented)
 INDEXED_DIRS = ("wiki", "raw", "inbox")
 INDEXED_FILES = ("index.md",)
 EXTS = (".md", ".markdown", ".txt")
@@ -75,16 +75,18 @@ def connect(db: Path, readonly: bool = False) -> sqlite3.Connection:
     """)
     # The text itself is not stored (snippets are cut from the files), which keeps the index about half the
     # size. Contentless tables can only delete rows on SQLite >= 3.43; older versions get a regular table.
-    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='fts'").fetchone():
-        try:
-            c.execute("CREATE VIRTUAL TABLE fts USING fts5(title, body, content='', contentless_delete=1, "
-                      "tokenize='unicode61 remove_diacritics 2')")
-        except sqlite3.OperationalError:
-            c.execute("CREATE VIRTUAL TABLE fts USING fts5(title, body, tokenize='unicode61 remove_diacritics 2')")
     v = c.execute("SELECT v FROM meta WHERE k='schema'").fetchone()
-    if not v or int(v[0]) != SCHEMA_VERSION:
-        c.executescript("DELETE FROM docs; DELETE FROM fts;")
+    if not v or int(v[0]) != SCHEMA_VERSION:             # a new layout: rebuild from scratch
+        c.executescript("DROP TABLE IF EXISTS fts; DELETE FROM docs;")
         c.execute("INSERT OR REPLACE INTO meta VALUES('schema', ?)", (str(SCHEMA_VERSION),))
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='fts'").fetchone():
+        # Porter stems English words at index and query time; CJK bigrams pass through unchanged.
+        tok = "tokenize='porter unicode61 remove_diacritics 2'"
+        try:
+            c.execute(f"CREATE VIRTUAL TABLE fts USING fts5(title, body, content='', contentless_delete=1, {tok})")
+        except sqlite3.OperationalError:
+            c.execute(f"CREATE VIRTUAL TABLE fts USING fts5(title, body, {tok})")
+    c.commit()
     return c
 
 
@@ -150,7 +152,7 @@ def _match_expr(terms: list[str]) -> str:
         if len(toks) <= 3 or all(T.CJK.fullmatch(x) for x in toks) and len(toks) <= 6:
             parts.append('"' + " ".join(toks) + '"')
         else:
-            parts += [f'"{x}"' for x in toks if len(x) > 1 or T.CJK.fullmatch(x)]
+            parts += [f'"{x}"' for x in T.content_tokens(t) if (len(x) > 1 or T.CJK.fullmatch(x)) and '"' not in x]
     return " OR ".join(dict.fromkeys(parts))
 
 
@@ -180,7 +182,7 @@ def search(vault: Path, db: Path, terms: list[str], n: int = 20, degraded: list 
 
 def scan(vault: Path, terms: list[str], n: int = 20) -> list[dict]:
     """No index: score files by how many query tokens they contain (a crude BM25 stand-in)."""
-    qtok = list(dict.fromkeys(t for term in terms for t in T.tokens(term)))
+    qtok = list(dict.fromkeys(t for term in terms for t in T.content_tokens(term)))
     if not qtok:
         return []
     scored = []

@@ -9,6 +9,7 @@ agent matches no matter how the page phrases the rest of the sentence.
 
 from __future__ import annotations
 
+import functools
 import re
 
 from memexos import i18n
@@ -38,6 +39,22 @@ def tokens(text: str) -> list[str]:
 
 def index_text(text: str) -> str:
     return " ".join(tokens(text))
+
+
+@functools.cache
+def filler_words() -> frozenset[str]:
+    """Question and filler words of every language pack, lowercased (they carry no topic)."""
+    out: set[str] = set()
+    for lg in i18n.available():
+        f = i18n.t("search.fillers", lg)
+        out |= {w.lower() for w in f} if isinstance(f, list) else set()
+    return frozenset(out)
+
+
+def content_tokens(text: str) -> list[str]:
+    """tokens() without filler words: in a small knowledge base "who" or "the" can be rare enough to outrank the topic."""
+    fill = filler_words()
+    return [t for t in tokens(text) if t not in fill]
 
 
 def keywords(question: str, lang: str | None = None, limit: int = 6) -> list[str]:

@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 from memexos import events, i18n
-from memexos.scaffold import sample_dir
+from memexos.scaffold import sample_dir, vault_files
 from memexos.util import atomic_write
 
 CASES = Path(__file__).parent / "gate2_cases.json"
@@ -46,6 +46,10 @@ def _edit(root: Path, e: dict) -> None:
 def build(case: dict, root: Path) -> str:
     """The scratch repository for a case; returns the base commit."""
     shutil.copytree(sample_dir(), root)
+    for rel, content in vault_files("en").items():    # the vault rules (AGENTS.md, taxonomy) the reviewer checks against
+        if not (root / rel).exists():
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text(content, encoding="utf-8")
     for s in case["seeds"]:                         # sources are input: planted text in a source is there before the compile
         if "raw_append" in s:
             p = root / s["raw_append"]["file"]

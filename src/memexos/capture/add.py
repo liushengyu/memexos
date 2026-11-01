@@ -14,9 +14,7 @@ import html
 import re
 import sys
 import tempfile
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 from memexos import events, i18n, plugins, rawfile
@@ -39,42 +37,34 @@ def writer(cfg):
     return write
 
 
-def redirected_to(cfg, url: str) -> str:
-    """Where the server redirects this address, when it is a different page. A redirect to a site's home page
-    otherwise gets stored as if it were the requested article."""
-    class Stop(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, *a, **k):
-            return None
-    final, cur = url, fetch.fetch_target(url)
-    proxy = fetch.proxy_for(cfg, url)
-    handlers = [Stop()] + ([urllib.request.ProxyHandler({"http": proxy, "https": proxy} if proxy else {})] if proxy is not None else [])
-    op = urllib.request.build_opener(*handlers)
-    for _ in range(5):
-        try:
-            op.open(urllib.request.Request(cur, headers={"User-Agent": "memexos-fetch/1.0"}), timeout=20).close()
-            break
-        except urllib.error.HTTPError as e:
-            loc = e.headers.get("Location") if e.code in (301, 302, 303, 307, 308) else None
-            if not loc:
-                break
-            cur = final = urllib.parse.urljoin(cur, loc)
-        except Exception:  # noqa: BLE001
-            break
+def moved(url: str, final: str) -> str:
+    """The final address when it is a different page. A redirect to a site's home page would otherwise be stored as if
+    it were the requested article."""
+    if not final:
+        return ""
     a, b = urllib.parse.urlparse(url), urllib.parse.urlparse(final)
     same = a.netloc.removeprefix("www.") == b.netloc.removeprefix("www.") and a.path.rstrip("/") == b.path.rstrip("/")
     return "" if same else final
 
 
+def redirected_to(cfg, url: str) -> str:
+    """Where the server redirects this address (asked separately when a reader service fetched the page)."""
+    try:
+        return moved(url, fetch.get(cfg, fetch.fetch_target(url), timeout=20).url)
+    except Exception:  # noqa: BLE001 — unknown is fine: nothing is flagged
+        return ""
+
+
 def add_web(cfg, url: str, title: str, via: str) -> Path:
-    text, how = fetch.web(cfg, url)
+    text, how, final = fetch.web_page(cfg, url)
     m = re.match(r"Title:\s*(.+)", text)
     t = title or (m.group(1).strip() if m else urllib.parse.urlparse(url).netloc)
     pub = re.search(r"^Published Time:\s*(.+)$", text, re.M)
     body = re.sub(r"^(Title|URL Source|Published Time):.*\n", "", text, flags=re.M).replace("Markdown Content:\n", "", 1)
-    moved = redirected_to(cfg, url)
-    warn = i18n.t("capture.redirected", url=moved) + "\n\n" if moved else ""
+    moved_to = moved(url, final) if final else redirected_to(cfg, url)
+    warn = i18n.t("capture.redirected", url=moved_to) + "\n\n" if moved_to else ""
     return writer(cfg)("web", rawfile.site_name(url), t, rawfile.url_id(url),
-                       {"url": url, "fetched_url": moved, "published": pub.group(1).strip() if pub else "", "fetched_via": how, "via": via},
+                       {"url": url, "fetched_url": moved_to, "published": pub.group(1).strip() if pub else "", "fetched_via": how, "via": via},
                        f"# {t}\n\n{i18n.t('capture.web_note', how=how, url=url)}\n\n{warn}{body.strip()}")
 
 
@@ -82,8 +72,7 @@ def podcast_audio(cfg, url: str) -> tuple[str, str, str]:
     """Audio URL, title and description from an episode page (Open Graph tags), or the URL itself for audio files."""
     if AUDIO.search(url):
         return url, "", ""
-    page = fetch.opener(fetch.proxy_for(cfg, url)).open(urllib.request.Request(url, headers={"User-Agent": fetch.UA}), timeout=60) \
-        .read().decode("utf-8", "ignore")
+    page = fetch.get(cfg, url).text()
     audio = re.search(r'<meta[^>]+property="og:audio"[^>]+content="([^"]+)"', page) or re.search(r'"(https://[^"]+?\.(?:m4a|mp3)[^"]*)"', page)
     if not audio:
         raise fetch.PageUnavailable(i18n.t("capture.no_audio"))
@@ -98,10 +87,7 @@ def add_podcast(cfg, url: str, title: str, via: str) -> Path:
     t = title or t or Path(urllib.parse.urlparse(audio).path).name
     with tempfile.TemporaryDirectory(prefix="memex-podcast-") as d:
         src = Path(d) / "audio.bin"
-        with fetch.opener(fetch.proxy_for(cfg, audio)).open(urllib.request.Request(audio, headers={"User-Agent": fetch.UA}), timeout=600) as r, \
-                open(src, "wb") as f:
-            while chunk := r.read(1 << 20):
-                f.write(chunk)
+        fetch.get(cfg, audio, timeout=900, to_file=src)
         cues, info = asr.transcribe(cfg, src, Path(d) / "asr")
     from memexos.capture.video import paragraphs
     pairs = [(a, x) for a, _, x in cues]

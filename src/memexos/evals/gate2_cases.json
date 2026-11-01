@@ -129,6 +129,11 @@
        "file": "wiki/concepts/Spaced repetition.md",
        "old": "a right answer moves the card up a box, a wrong one sends it back to the first",
        "new": "a right answer moves the card up a box"
+      },
+      {
+       "file": "index.md",
+       "old": "right moves up a box, wrong goes back to the first",
+       "new": "right moves up a box"
       }
      ],
      "detect": [

@@ -18,11 +18,10 @@ import socket
 import sys
 import tempfile
 import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from memexos import i18n
+from memexos import i18n, net
 from memexos.util import proxy_env, run, which
 
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"
@@ -54,10 +53,12 @@ def proxy_for(cfg, url: str) -> str | None:
     return None if not v else "" if v == "direct" else v
 
 
-def opener(proxy: str | None):
-    if proxy is None:
-        return urllib.request.build_opener()
-    return urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy} if proxy else {}))
+def get(cfg, url: str, headers: dict | None = None, timeout: float = 60, to_file: Path | None = None, follow: bool = True,
+        proxy_url: str | None = None) -> net.Response:
+    """GET through the configured route; every redirect hop must be a public address too."""
+    return net.request(url, headers={"User-Agent": UA, **(headers or {})}, proxy=proxy_for(cfg, proxy_url or url),
+                       proxy_cacert=cfg.get("fetch.proxy_cacert") or None, timeout=timeout, to_file=to_file, follow=follow,
+                       check=lambda u: public_url(cfg, u), prefer=cfg.get("fetch.client") or "auto")
 
 
 def public_url(cfg, url: str) -> str:
@@ -182,23 +183,27 @@ def fetch_target(url: str) -> str:
 
 
 def web(cfg, url: str) -> tuple[str, str]:
-    """(text, how). Raises PageUnavailable with the reasons when no attempt produced real content, so callers can try
-    another source instead of storing a bot-check page as if it were the article."""
+    text, how, _ = web_page(cfg, url)
+    return text, how
+
+
+def web_page(cfg, url: str) -> tuple[str, str, str]:
+    """(text, how, final address after redirects; "" when a reader service fetched it). Raises PageUnavailable with
+    the reasons when no attempt produced real content, so callers can try another source instead of storing a
+    bot-check page as if it were the article."""
     public_url(cfg, url)
     target = fetch_target(url)
-    proxy = proxy_for(cfg, url)
     problems = []
     readers = ["jina", "direct"] if (cfg.get("fetch.reader") or "direct") == "jina" else ["direct"]
     for how in readers:
         try:
+            final = ""
             if how == "jina":
-                req = urllib.request.Request("https://r.jina.ai/" + target, headers={"User-Agent": "memexos-fetch/1.0",
-                                                                                     "X-Return-Format": "markdown"})
-                text = opener(proxy).open(req, timeout=60).read().decode("utf-8", errors="ignore")
+                text = get(cfg, "https://r.jina.ai/" + target, {"User-Agent": "memexos-fetch/1.0", "X-Return-Format": "markdown"},
+                           proxy_url=url).text()
             else:
-                resp = opener(proxy).open(urllib.request.Request(target, headers={"User-Agent": UA}), timeout=60)
-                data = resp.read()
-                ctype = (resp.headers.get("Content-Type") or "").lower()
+                resp = get(cfg, target)
+                data, ctype, final = resp.data, resp.content_type, resp.url
                 if "pdf" in ctype or data[:5] == b"%PDF-":
                     title, body = pdf_to_text(data)
                     text, how = (f"Title: {title}\n\n" if title else "") + body, "direct-pdf"
@@ -207,15 +212,17 @@ def web(cfg, url: str) -> tuple[str, str]:
                 elif "json" in ctype:
                     text = data.decode("utf-8", errors="ignore")
                 else:
-                    raw = data.decode(resp.headers.get_content_charset() or "utf-8", errors="ignore")
+                    raw = resp.text()
                     t = re.search(r"(?is)<title[^>]*>(.*?)</title>", raw)
                     text = (f"Title: {html.unescape(t.group(1)).strip()}\n\n" if t else "") + html_to_text(raw)
             why = page_problem(text)
             if not why:
-                return text, how
+                return text, how, final
             problems.append(f"{how}: {why}")
         except PageUnavailable as e:
             problems.append(f"{how}: {e}")
+        except net.NetError as e:
+            problems.append(f"{how}: {i18n.t('fetch.http_error', code=e.status) if e.status else str(e)}")
         except Exception as e:  # noqa: BLE001 — network errors become reasons, not crashes
             problems.append(f"{how}: {str(e)[:160]}")
     raise PageUnavailable(i18n.t("fetch.failed", url=url, why="; ".join(problems)))
@@ -294,7 +301,7 @@ def _err(r) -> str:
 # ---------------------------------------------------------------- RSS / Atom
 def rss(cfg, url: str, n: int) -> list[dict]:
     public_url(cfg, url)
-    root = ET.fromstring(opener(proxy_for(cfg, url)).open(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=60).read())
+    root = ET.fromstring(get(cfg, url).data)
     strip = lambda tag: tag.split("}", 1)[-1]  # noqa: E731
     out = []
     for el in root.iter():

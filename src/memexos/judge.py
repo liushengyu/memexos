@@ -20,12 +20,10 @@ from __future__ import annotations
 import json
 import tempfile
 import time
-import urllib.error
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from memexos import credentials
+from memexos import credentials, net
 
 NONE_FITS = "(none of these fits)"
 
@@ -165,25 +163,21 @@ class JevJudge:
         if not ok:
             raise JudgeUnavailable(why)
         body = json.dumps({"model": self.model, "state": state, "questions": questions}, ensure_ascii=False).encode()
-        req = urllib.request.Request(self.url, data=body, headers={"Authorization": "Bearer " + credentials.get(self.key_env),
-                                                                  "Content-Type": "application/json"})
-        if self.proxy == "direct":
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        elif self.proxy:
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": self.proxy, "https": self.proxy}))
-        else:
-            opener = urllib.request.build_opener()          # environment proxies, if any
+        headers = {"Authorization": "Bearer " + credentials.get(self.key_env), "Content-Type": "application/json"}
+        proxy = "" if self.proxy == "direct" else (self.proxy or None)          # None: environment proxies, if any
         for attempt in range(tries):
             try:
-                out = json.loads(opener.open(req, timeout=timeout).read())
+                r = net.request(self.url, method="POST", data=body, headers=headers, proxy=proxy, timeout=timeout,
+                                proxy_cacert=self.cfg.get("fetch.proxy_cacert") or None)
+                out = json.loads(r.data)
                 self.tokens += ((out.get("usage") or {}).get("input_tokens") or 0)
                 return out
-            except urllib.error.HTTPError as e:
-                if e.code in (401, 402, 403):
-                    JevJudge.down = {401: "Jev key rejected", 402: "Jev credit used up", 403: "Jev refused access"}[e.code]
+            except net.NetError as e:
+                if e.status in (401, 402, 403):
+                    JevJudge.down = {401: "Jev key rejected", 402: "Jev credit used up", 403: "Jev refused access"}[e.status]
                     raise JudgeUnavailable(JevJudge.down)
                 time.sleep(2 * (attempt + 1))
-            except Exception:  # noqa: BLE001 — network trouble: retry, then give up on this one call
+            except Exception:  # noqa: BLE001 — bad answers or network trouble: retry, then give up on this one call
                 time.sleep(2 * (attempt + 1))
         return None
 

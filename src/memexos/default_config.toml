@@ -148,7 +148,13 @@ proxy = ""
 # How web pages are turned into text: direct (fetch and convert locally) or
 # jina (https://r.jina.ai, a hosted reader; sends the URL to that service).
 reader = "direct"
+# Route for fetching: "" = whatever HTTPS_PROXY says, "direct" = no proxy, or a proxy URL (http://, https://,
+# socks5://). Plugins can set their own route ([plugins.<name>] proxy).
 proxy = ""
+# CA certificate (PEM) of a proxy that presents its own certificate, e.g. a private https:// proxy.
+proxy_cacert = ""
+# HTTP client: auto = curl when installed (https:// and socks proxies, compression, HTTP/2), else Python's urllib.
+client = "auto"
 # Some local proxies resolve every hostname to a fake address in 198.18.0.0/15.
 # Allow those addresses through the private-network guard.
 allow_fake_ip = false
