@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from pathlib import Path
 
 from memexos.util import run, which
@@ -42,8 +43,19 @@ def db_file(cfg) -> Path:
     return Path(base) / "qmd" / f"{index_name(cfg)}.sqlite"
 
 
+def marker(cfg) -> Path:
+    return cfg.paths.state / "qmd.json"
+
+
 def ready(cfg) -> bool:
-    return bool(command(cfg)) and config_file(cfg).exists() and db_file(cfg).exists()
+    """Usable for search: installed, indexed, and embedded at least once (the first embedding downloads models and can
+    take a long time; until it has finished, search keeps to the built-in index)."""
+    if not (command(cfg) and config_file(cfg).exists() and db_file(cfg).exists()):
+        return False
+    try:
+        return json.loads(marker(cfg).read_text()).get("index") == index_name(cfg)
+    except (OSError, ValueError):
+        return False
 
 
 def _env():
@@ -81,6 +93,9 @@ def update(cfg, embed: bool = True) -> dict:
     if embed and out.returncode == 0:
         e = run([exe, "--index", index_name(cfg), "embed"], env=_env(), timeout=3600 * 3)
         msg += e.stdout + e.stderr
+        if e.returncode == 0:              # vectors exist: from now on search may use them
+            marker(cfg).parent.mkdir(parents=True, exist_ok=True)
+            marker(cfg).write_text(json.dumps({"index": index_name(cfg), "embedded_at": time.strftime("%Y-%m-%dT%H:%M:%S")}))
     return {"ok": out.returncode == 0, "summary": " ".join(re.findall(r"(Indexed:[^\n]*|Embedded [^\n]*)", msg))[:300],
             "why": "" if out.returncode == 0 else msg.strip()[-300:]}
 

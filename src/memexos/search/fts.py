@@ -140,43 +140,139 @@ def doc_count(db: Path) -> int | None:
         return None
 
 
-def _match_expr(terms: list[str]) -> str:
-    """FTS5 query: OR of the terms. A short term (a keyword, up to 3 tokens) must match as a phrase, so
-    "rank fusion" or a CJK keyword (its bigrams) matches only in that order; a long term (the whole question)
-    is split into its tokens, because a sentence never appears verbatim."""
-    parts = []
+def _parts(terms: list[str]) -> list[str]:
+    """The query as phrases (space-joined tokens). A short term (a keyword, up to 3 tokens) must match as a phrase, so
+    "rank fusion" or a CJK keyword (its bigrams) matches only in that order; a long term (the whole question) is split
+    into its content tokens, because a sentence never appears verbatim."""
+    parts: list[str] = []
     for t in terms:
         toks = [x.replace('"', "") for x in T.tokens(t)]
         if not toks:
             continue
         if len(toks) <= 3 or all(T.CJK.fullmatch(x) for x in toks) and len(toks) <= 6:
-            parts.append('"' + " ".join(toks) + '"')
+            parts.append(" ".join(toks))
         else:
-            parts += [f'"{x}"' for x in T.content_tokens(t) if (len(x) > 1 or T.CJK.fullmatch(x)) and '"' not in x]
-    return " OR ".join(dict.fromkeys(parts))
+            parts += [x for x in T.content_tokens(t) if (len(x) > 1 or T.CJK.fullmatch(x)) and '"' not in x]
+    return list(dict.fromkeys(p for p in parts if p))
 
 
-def search(vault: Path, db: Path, terms: list[str], n: int = 20, degraded: list | None = None) -> list[dict]:
-    """[{path, title, snippet, score}] best first. Falls back to a file scan when the index is unusable."""
-    expr = _match_expr(terms)
-    if not expr:
+def _match_expr(terms: list[str]) -> str:
+    return " OR ".join(f'"{p}"' for p in _parts(terms))
+
+
+# BM25 with the Lucene / Elasticsearch weight for how rare a term is: log(1 + (N - df + 0.5) / (df + 0.5)). SQLite's own
+# bm25() clamps that weight to almost zero for a term found in more than half of the documents, which in a small
+# knowledge base about one subject is exactly the subject's own name. SQLite still finds the candidates; their scores
+# are recomputed here from the index (stemmed term positions, column lengths), so stemming and phrases behave the same.
+K1, B = 1.2, 0.75
+COLUMNS = {"title": 4.0, "body": 1.0}
+
+
+def _varints(blob: bytes) -> list[int]:
+    """SQLite varints (as in the fts5 docsize table): 7 bits per byte, high-order groups first, a set top bit meaning
+    "more follows"; the ninth byte contributes all 8 bits."""
+    out, i = [], 0
+    while i < len(blob):
+        v = 0
+        for k in range(9):
+            byte = blob[i]
+            i += 1
+            if k == 8:
+                v = (v << 8) | byte
+                break
+            v = (v << 7) | (byte & 0x7F)
+            if not byte & 0x80:
+                break
+        out.append(v)
+    return out
+
+
+def idf(n: int, df: int, keyword: bool) -> float:
+    """SQLite's weight (near zero above half the documents) for tokens of the whole question, which silences the many
+    common tokens a sentence brings, especially CJK bigrams; the never-zero Lucene weight for keywords, which carry the
+    subject even when the subject is on most pages of a small knowledge base."""
+    if keyword:
+        return math.log(1 + (n - df + 0.5) / (df + 0.5))
+    return max(math.log((n - df + 0.5) / (df + 0.5)), 1e-6)
+
+
+def _rescore(c: sqlite3.Connection, parts: list[str], cands: list[int], keywords: set[str] | frozenset = frozenset()) -> dict[int, float]:
+    c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.memex_vi USING fts5vocab(main, fts, instance)")
+    c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.memex_q USING fts5(x, tokenize='porter unicode61 remove_diacritics 2')")
+    c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.memex_qv USING fts5vocab(temp, memex_q, instance)")
+    c.execute("DELETE FROM temp.memex_q")
+    c.executemany("INSERT INTO temp.memex_q(rowid, x) VALUES(?, ?)", list(enumerate(parts, 1)))
+    stems: dict[int, list[str]] = {}
+    for doc, term in c.execute("SELECT doc, term FROM temp.memex_qv ORDER BY doc, offset"):
+        stems.setdefault(doc, []).append(term)
+    sizes = {rid: _varints(sz) for rid, sz in c.execute("SELECT id, sz FROM fts_docsize")}
+    n = max(len(sizes), 1)
+    avg = [max(sum(v[i] for v in sizes.values() if len(v) > i) / n, 1) for i in range(len(COLUMNS))]
+    want = set(cands)
+    terms = sorted({t for ts in stems.values() for t in ts})
+    pos: dict[tuple[str, int, str], set[int]] = {}
+    for i in range(0, len(terms), 200):
+        chunk = terms[i:i + 200]
+        q = f"SELECT term, doc, col, offset FROM temp.memex_vi WHERE term IN ({','.join('?' * len(chunk))})"
+        for term, doc, col, off in c.execute(q, chunk):
+            if doc in want:
+                pos.setdefault((term, doc, col), set()).add(off)
+    total_avg = sum(avg)
+    scores = dict.fromkeys(cands, 0.0)
+    for i, part in enumerate(parts, 1):
+        toks = stems.get(i)
+        if not toks:
+            continue
+        df = c.execute("SELECT count(*) FROM fts WHERE fts MATCH ?", ('"' + part.replace('"', "") + '"',)).fetchone()[0]
+        w_idf = idf(n, df, part in keywords)
+        for doc in cands:
+            # as SQLite's bm25(): column weights scale the hit count before saturation; the length is the whole row's
+            f = 0.0
+            for col, w in COLUMNS.items():
+                first = pos.get((toks[0], doc, col))
+                if first:
+                    f += w * sum(1 for o in first if all(o + k in pos.get((t, doc, col), ()) for k, t in enumerate(toks[1:], 1)))
+            if f:
+                length = sum(sizes.get(doc, [])) or total_avg
+                scores[doc] += w_idf * f * (K1 + 1) / (f + K1 * (1 - B + B * length / total_avg))
+    return scores
+
+
+def search(vault: Path, db: Path, terms: list[str], n: int = 20, degraded: list | None = None,
+           keywords: list[str] | None = None) -> list[dict]:
+    """[{path, title, snippet, score}] best first. `keywords` (a subset of terms) are the topical words. Falls back to
+    a file scan when the index is unusable."""
+    parts = _parts(terms)
+    kw_parts = set(_parts(keywords)) if keywords else set()
+    if not parts:
         return []
+    expr = " OR ".join(f'"{p}"' for p in parts)
     try:
         c = connect(db, readonly=True)
-        rows = c.execute("""SELECT d.path, d.title, bm25(fts, 4.0, 1.0) AS s FROM fts JOIN docs d ON d.id = fts.rowid
-                            WHERE fts MATCH ? ORDER BY s LIMIT ?""", (expr, n)).fetchall()
+        cands = [r for (r,) in c.execute("SELECT rowid FROM fts WHERE fts MATCH ? ORDER BY bm25(fts, 4.0, 1.0) LIMIT ?",
+                                         (expr, max(200, n * 10)))]
+        try:
+            scores = _rescore(c, parts, cands, kw_parts)
+        except sqlite3.Error:                  # an SQLite without fts5vocab: keep SQLite's own order
+            scores = {r: -i for i, r in enumerate(cands)}
+        best = sorted(cands, key=lambda r: -scores[r])[:n]
+        meta = {rid: (path, title) for rid, path, title in
+                c.execute(f"SELECT id, path, title FROM docs WHERE id IN ({','.join('?' * len(best))})", best)} if best else {}
         c.close()
     except sqlite3.Error as e:
         if degraded is not None:
             degraded.append(f"index unavailable ({e}); scanned files directly")
         return scan(vault, terms, n)
     out = []
-    for path, title, s in rows:
+    for rid in best:
+        if rid not in meta:
+            continue
+        path, title = meta[rid]
         try:
             body = (vault / path).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        out.append({"path": path, "title": title, "snippet": T.snippet(split_frontmatter(body)[1], terms), "score": -s})
+        out.append({"path": path, "title": title, "snippet": T.snippet(split_frontmatter(body)[1], terms), "score": round(scores[rid], 4)})
     return out
 
 

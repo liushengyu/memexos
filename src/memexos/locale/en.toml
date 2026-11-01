@@ -147,7 +147,9 @@ verify = "verifying a reported problem"
 fillers = ["what", "why", "how", "which", "who", "whom", "when", "where", "does", "do", "did", "is", "are", "was", "were", "be",
            "been", "the", "a", "an", "of", "in", "on", "for", "to", "with", "about", "can", "could", "should", "would", "will",
            "our", "my", "your", "we", "i", "you", "it", "its", "this", "that", "these", "those", "there", "any", "have", "has",
-           "had", "and", "or", "if", "then", "than", "from", "by", "at", "as", "into", "know", "tell", "me", "us", "please"]
+           "had", "and", "or", "if", "then", "than", "from", "by", "at", "as", "into", "know", "tell", "me", "us", "please",
+           "each", "every", "all", "some", "any", "other", "also", "just", "only", "very", "much", "many", "more", "most",
+           "such", "own", "same", "so", "too", "not", "no", "there", "here", "about"]
 header = "\"{query}\" · mode {mode} · keywords {keywords} · {seconds}s"
 compiled_as = "compiled into wiki page [[{page}]] (read that first)"
 excerpt = "excerpt: {text}"

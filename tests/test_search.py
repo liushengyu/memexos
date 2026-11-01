@@ -105,3 +105,34 @@ def test_search_works_in_read_only_sandbox(vault, monkeypatch, capsys):
         assert json.loads(capsys.readouterr().out)["hits"]
     finally:
         os.chmod(db.parent, stat.S_IRWXU)
+
+
+def test_the_subject_word_counts_even_when_most_pages_have_it(tmp_path):
+    """SQLite's bm25 gives a term on more than half of the pages almost no weight; in a small knowledge base about one
+    subject that is the subject itself, and a rare word like "who" used to win. Keywords keep a non-zero weight and
+    filler words are not searched."""
+    from memexos.search import fts, text as T
+    assert fts.idf(5, 4, True) > 0.1 and fts.idf(5, 4, False) < 1e-3
+    v = tmp_path / "v"
+    (v / "wiki" / "concepts").mkdir(parents=True)
+    (v / "raw").mkdir()
+    pages = {"Leitner system": "Flashcards sorted into boxes; a wrong answer sends a card back to the first box.",
+             "Hermann Ebbinghaus": "A German psychologist who published the first systematic experiments on forgetting.",
+             "Spaced repetition": "Leitner boxes and SM-2 both schedule reviews; Leitner used paper.",
+             "SM-2": "SM-2 is not Leitner; it multiplies intervals.",
+             "Anki": "Anki replaced paper Leitner boxes for many people."}
+    for name, body in pages.items():
+        (v / "wiki" / "concepts" / f"{name}.md").write_text(f"# {name}\n\n{body}\n")
+    db = tmp_path / "i.sqlite"
+    fts.update(v, db)
+    q = "who invented the leitner box system"
+    kws = T.keywords(q)
+    hits = fts.search(v, db, list(dict.fromkeys(kws + [q])), 3, None, kws)
+    assert hits[0]["path"] == "wiki/concepts/Leitner system.md"
+
+
+def test_sqlite_varints():
+    from memexos.search.fts import _varints
+    assert _varints(bytes([0x02, 0x04])) == [2, 4]
+    assert _varints(bytes([0x81, 0x00])) == [128]
+    assert _varints(bytes([0x82, 0x2C, 0x05])) == [300, 5]

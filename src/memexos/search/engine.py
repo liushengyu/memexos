@@ -57,13 +57,13 @@ def search(cfg, question: str, kw: list[str] | None = None, n: int = 8, mode: st
         mode = "keyword"
 
     if mode == "keyword":
-        hits = fts.search(cfg.vault, db, terms, max(n * 2, cand), degraded)
+        hits = fts.search(cfg.vault, db, terms, max(n * 2, cand), degraded, kws)
     elif mode == "vector":
         hits = qmd.query(cfg, "vsearch", question, max(n * 2, cand), degraded) or []
     elif mode == "deep":
         hits = qmd.query(cfg, "query", question, max(n * 2, cand), degraded) or []
     else:
-        lists = [fts.search(cfg.vault, db, terms, cand, degraded)]
+        lists = [fts.search(cfg.vault, db, terms, cand, degraded, kws)]
         if use_qmd:
             v = qmd.query(cfg, "vsearch", question, cand, degraded)
             if v:
@@ -73,7 +73,7 @@ def search(cfg, question: str, kw: list[str] | None = None, n: int = 8, mode: st
             hits = rr.rerank(cfg, question, hits, degraded, k=cand)
 
     if not hits and mode != "keyword":
-        hits = fts.search(cfg.vault, db, terms, max(n * 2, cand), degraded)
+        hits = fts.search(cfg.vault, db, terms, max(n * 2, cand), degraded, kws)
     inbox = cfg.get("search.include_inbox") if include_inbox is None else include_inbox
     out, seen = [], set()
     for h in hits:
