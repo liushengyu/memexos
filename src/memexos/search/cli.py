@@ -113,7 +113,7 @@ def cmd_search(loader, argv: list[str]) -> int:
         return 1
     t0 = time.time()
     hits, kws, degraded = engine.search(cfg, a.query, a.kw.split() if a.kw else None, a.n, a.mode, a.inbox or None)
-    note_search(cfg, a.query, a.mode, len(hits), time.time() - t0)
+    note_search(cfg, a.query, a.mode, len(hits), time.time() - t0, top=[h["path"] for h in hits[:10]])
     if a.json:
         print(json.dumps({"degraded": degraded, "keywords": kws, "hits": [
             {**{k: h.get(k) for k in ("path", "title", "snippet")},
@@ -138,10 +138,19 @@ def cmd_search(loader, argv: list[str]) -> int:
     return 0
 
 
-def note_search(cfg, query: str, mode: str, hits: int, seconds: float, job: str = "search") -> None:
-    """Best effort: lets the status view and the console see that agents are searching. Read-only sandboxes skip it."""
+def note_search(cfg, query: str, mode: str, hits: int, seconds: float, job: str = "search", top: list[str] | None = None) -> None:
+    """Best effort: lets the status view, the console and evaluations see what agents search and read.
+    Read-only sandboxes skip it."""
     try:
-        events.emit(cfg.paths.state, "search", job=job, query=query[:160], mode=mode, hits=hits, seconds=round(seconds, 2))
+        events.emit(cfg.paths.state, "search", job=job, query=query[:160], mode=mode, hits=hits, seconds=round(seconds, 2),
+                    top=top or [])
+    except OSError:
+        pass
+
+
+def note_read(cfg, path: str) -> None:
+    try:
+        events.emit(cfg.paths.state, "read", job="search", path=path)
     except OSError:
         pass
 
@@ -172,6 +181,7 @@ def cmd_get(loader, argv: list[str]) -> int:
         print(i18n.t("get.not_found", page=a.page), file=sys.stderr)
         return 1
     lines = (cfg.vault / rel).read_text(encoding="utf-8", errors="replace").splitlines()
+    note_read(cfg, rel)
     start = max(a.start - 1, 0)
     end = start + a.lines if a.lines else len(lines)
     print(i18n.t("get.header", path=rel, start=start + 1, end=min(end, len(lines)), total=len(lines)) + "\n")

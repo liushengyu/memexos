@@ -37,6 +37,9 @@ def get(cfg, name: str) -> Backend:
 
 
 def chain(cfg, role: str) -> list[str]:
+    """The backends a role tries, in order. "@name" is a fixed backend (evaluations compare named agents)."""
+    if role.startswith("@"):
+        return [role[1:]]
     v = cfg.get(f"models.{role}") or cfg.get("models.worker") or ["claude-code"]
     return [v] if isinstance(v, str) else list(v)
 

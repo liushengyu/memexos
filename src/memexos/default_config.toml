@@ -209,6 +209,14 @@ investigate_min_score = 0.75
 expire_days = 30
 
 # ---------------------------------------------------------------------------
+[evals]
+# Retrieval evaluation (memex eval retrieval; docs/evals.md). Writing, checking and grading questions use this role's
+# models: the reviewer by default, so the writer does not grade its own work.
+role = "reviewer"
+cover_per_night = 20                  # pages that get a question each night (the nightly eval-cover step); 0 = all
+l2_agents = ["claude-code", "codex"]  # agents that answer in the usage test (at least two, so the interface is not tuned to one)
+l2_timeout = 1200
+
 [schedule]
 backend = "auto"          # auto | launchd | systemd | cron | none
 label_prefix = "io.memexos"

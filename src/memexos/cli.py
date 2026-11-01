@@ -44,6 +44,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "schedule": ("memexos.schedule", "cmd_schedule"),
     "nightly": ("memexos.schedule", "cmd_nightly"),
     "console": ("memexos.console.server", "cmd_console"),
+    "eval": ("memexos.evals", "cmd_eval"),
     "feedback": ("memexos.usage", "cmd_feedback"),
     "resume": ("memexos.cli", "cmd_resume"),
 }

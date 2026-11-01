@@ -271,10 +271,7 @@ def _classify_backlog(cfg):
 
 
 def _eval_cover(cfg):
-    try:
-        from memexos.evals import retrieval
-    except ImportError:
-        return None
+    from memexos.evals import retrieval
     return retrieval.cover(cfg)
 
 

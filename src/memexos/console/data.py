@@ -32,7 +32,7 @@ EVENT_KIND = {
     "ok": {"publish", "intake.done", "capture.done", "capture.video", "visual.done", "correct.done", "catalog.sync", "index.update",
            "nightly.done"},
 }
-FEED_SKIP = {"model.call", "step.end", "run.start", "run.end", "search", "stage.open", "index.qmd", "catalog.check"}
+FEED_SKIP = {"model.call", "step.end", "run.start", "run.end", "search", "read", "stage.open", "index.qmd", "catalog.check"}
 
 
 def event_kind(ev: dict) -> str:

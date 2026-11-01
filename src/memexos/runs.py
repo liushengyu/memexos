@@ -86,7 +86,7 @@ class _Builder:
 
     def feed(self, ev: dict) -> None:
         rid, typ, d = ev.get("run") or "-", ev.get("type", ""), ev.get("data") or {}
-        if typ == "search":                  # agents reading; not part of any unit of work
+        if typ in ("search", "read"):        # agents reading; not part of any unit of work
             return
         t = events._epoch(ev.get("ts", ""))
         rs = self.runs.get(rid)
