@@ -52,10 +52,11 @@ settings_env = false
 
 [backends.codex]
 command = "codex"
-model = ""
+model = ""            # empty: the model named in your own Codex config
 effort = "high"
 proxy = ""
 retry_after_minutes = 60
+isolate = true        # do not load your Codex config.toml (MCP servers, instructions) or rules; only the login is shared
 
 [backends.anthropic]
 # The Claude API through the official SDK (pip install "memexos[anthropic]"), for machines without the

@@ -188,7 +188,7 @@ def process(cfg, raw: Path) -> Path:
     if used_today(cfg) >= int(cfg.get("visual.daily_max") or 20):
         raise RuntimeError(i18n.t("visual.daily_cap", n=cfg.get("visual.daily_max") or 20))
     chars, per_min = thinness(fm, paras)
-    with tempfile.TemporaryDirectory(prefix="memex-visual-") as d:
+    with tempfile.TemporaryDirectory(prefix="memex-visual-") as d, events.step(cfg.paths.state, "visual", path=raw.name):
         work = Path(d)
         events.emit(cfg.paths.state, "visual.start", path=raw.name, title=fm.get("title", ""))
         video = download(cfg, fm["url"], work)
@@ -302,9 +302,9 @@ def cmd_add_visual(loader, argv: list[str]) -> int:
     ap.add_argument("--limit", type=int)
     a = ap.parse_args(argv)
     cfg = loader()
-    events.new_run("visual")
     if a.backlog:
-        print(i18n.t("visual.backlog_done", n=backlog(cfg, a.limit)))
+        with events.run(cfg.paths.state, "visual"):
+            print(i18n.t("visual.backlog_done", n=backlog(cfg, a.limit)))
         return 0
     if not a.raw:
         ap.error("a transcript path is required")
@@ -314,9 +314,10 @@ def cmd_add_visual(loader, argv: list[str]) -> int:
         chars, per_min = thinness(fm, paras)
         print(i18n.t("visual.check", chars=chars, per_min=f"{per_min:.0f}", thin=i18n.t("visual.thin" if is_thin_file(p) else "visual.not_thin")))
         return 0 if is_thin_file(p) else 1
-    try:
-        print(process(cfg, p))
-        return 0
-    except Exception as e:  # noqa: BLE001
-        print(str(e), file=sys.stderr)
-        return 1
+    with events.run(cfg.paths.state, "visual"):
+        try:
+            print(process(cfg, p))
+            return 0
+        except Exception as e:  # noqa: BLE001
+            print(str(e), file=sys.stderr)
+            return 1

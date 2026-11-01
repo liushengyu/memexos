@@ -141,13 +141,14 @@ def cmd_add_url(loader, argv: list[str]) -> int:
     if not (cfg.vault / "raw").is_dir():
         print(i18n.t("cli.no_vault", path=cfg.vault), file=sys.stderr)
         return 1
-    events.new_run("add-url")
-    try:
-        p = add(cfg, a.url, a.title, a.via)
-    except (fetch.PageUnavailable, asr.ASRUnavailable, RuntimeError) as e:
-        print(str(e), file=sys.stderr)
-        return 1
-    events.emit(cfg.paths.state, "capture.done", path=p.relative_to(cfg.vault).as_posix(), url=a.url)
+    with events.run(cfg.paths.state, "add-url"):
+        try:
+            with events.step(cfg.paths.state, "capture", url=a.url):
+                p = add(cfg, a.url, a.title, a.via)
+        except (fetch.PageUnavailable, asr.ASRUnavailable, RuntimeError) as e:
+            print(str(e), file=sys.stderr)
+            return 1
+        events.emit(cfg.paths.state, "capture.done", path=p.relative_to(cfg.vault).as_posix(), url=a.url)
     print(p)
     print(i18n.t("capture.next"))
     return 0

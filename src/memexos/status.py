@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-from memexos import backends, events, i18n, lock
+from memexos import backends, events, i18n, runs
 from memexos.pipeline.stage import ledger, pending_raw
 
 TTY = sys.stdout.isatty()
@@ -30,28 +30,24 @@ def dur(s: float) -> str:
     return i18n.t("status.seconds", n=s) if s < 90 else i18n.t("status.minutes", n=round(s / 60)) if s < 5400 else i18n.t("status.hours", n=f"{s / 3600:.1f}")
 
 
-def running_runs(cfg) -> list[dict]:
-    """Runs that started and have not ended, whose process still holds a lock or started recently."""
-    starts, ends = {}, set()
-    for e in events.read(cfg.paths.state, since=time.time() - 86400 * 2, types=("run.",)):
-        if e["type"] == "run.start":
-            starts[e["run"]] = e
-        else:
-            ends.add(e["run"])
-    holders = {name: lock.holder(cfg.paths.locks, name) for name in ("write", "intake", "visual", "classify", "reindex")}
-    live = [e for r, e in starts.items() if r not in ends]
-    return [{"run": e["run"], "job": e["job"], "since": events._epoch(e["ts"]), "locks": [n for n, p in holders.items() if p]} for e in live
-            if any(holders.values()) or time.time() - events._epoch(e["ts"]) < 3600]
+def job_label(job: str) -> str:
+    return i18n.t(f"job.{job}") if i18n.has(f"job.{job}") else job
+
+
+def step_label(step: str | None) -> str:
+    return i18n.t(f"step.{step}") if step and i18n.has(f"step.{step}") else (step or "…")
 
 
 def snapshot(cfg) -> dict:
     now = time.time()
     day = time.strftime("%Y-%m-%d")
-    today = [e for e in events.read(cfg.paths.state, since=time.mktime(time.strptime(day, "%Y-%m-%d")))]
+    t_day = time.mktime(time.strptime(day, "%Y-%m-%d"))
+    today = list(events.read(cfg.paths.state, since=t_day))
     doing, alerts, warn, done = [], [], [], []
-    for r in running_runs(cfg):
-        last = next((e for e in reversed(today) if e.get("run") == r["run"]), None)
-        doing.append(i18n.t("status.running", job=r["job"], since=dur(now - r["since"]), last=events.render(last) if last else "-"))
+    live = runs.running(cfg.paths.state)
+    for u in live:
+        doing.append(i18n.t("status.running", job=job_label(u["job"]), step=step_label(u["active"][-1] if u["active"] else None),
+                            since=dur(now - u["t0"])))
     pend = pending_raw(cfg.vault)
     if pend:
         doing.append(i18n.t("status.pending", n=len(pend), batch=cfg.get("pipeline.ingest_batch") or 3))
@@ -102,9 +98,10 @@ def snapshot(cfg) -> dict:
                "untriaged": n(lambda x: not x["kind"])}
     except Exception:  # noqa: BLE001
         box = {}
-    state = i18n.t("status.state_busy") if doing and running_runs(cfg) else i18n.t("status.state_pending") if pend else i18n.t("status.state_idle")
-    return {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "state": state, "doing": doing, "alerts": alerts, "warn": warn, "done": done,
-            "inbox": box, "pending": pend, "cost_today": round(cost, 2), "paused": (cfg.paths.state / "PAUSE").exists()}
+    state_key = "busy" if live else "pending" if pend else "idle"
+    return {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "state": i18n.t("status.state_" + state_key), "state_key": state_key,
+            "doing": doing, "alerts": alerts, "warn": warn, "done": done, "inbox": box, "pending": pend, "running": live,
+            "published_today": len(pubs), "cost_today": round(cost, 2), "paused": (cfg.paths.state / "PAUSE").exists()}
 
 
 def render(cfg) -> str:

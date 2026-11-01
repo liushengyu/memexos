@@ -133,12 +133,13 @@ def cmd_add_video(loader, argv: list[str]) -> int:
     ap.add_argument("url")
     a = ap.parse_args(argv)
     cfg = loader()
-    events.new_run("add-video")
-    try:
-        p = add_video(cfg, a.url)
-    except (fetch.PageUnavailable, asr.ASRUnavailable, RuntimeError) as e:
-        print(str(e), file=sys.stderr)
-        return 1
+    with events.run(cfg.paths.state, "add-video"):
+        try:
+            with events.step(cfg.paths.state, "capture", url=a.url):
+                p = add_video(cfg, a.url)
+        except (fetch.PageUnavailable, asr.ASRUnavailable, RuntimeError) as e:
+            print(str(e), file=sys.stderr)
+            return 1
     print(p)
     print(i18n.t("capture.next"))
     return 0

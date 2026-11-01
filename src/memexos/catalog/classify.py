@@ -344,12 +344,13 @@ def classify(cfg, rels: list[str], role: str = "worker", why: str = "") -> int:
         t0 = time.time()
         cat = load(cfg)
         try:
-            try:
-                scr = tx.screen({r: digest(cfg, r) for r in part})
-            except judge.JudgeUnavailable:
-                scr = {}
-            rows, nds, model = run_batch(cfg, tx, part, scr, cat, role)
-            rows, notes = settle(tx, rows, nds, scr, part, model)
+            with events.step(cfg.paths.state, "classify", files=len(part)):
+                try:
+                    scr = tx.screen({r: digest(cfg, r) for r in part})
+                except judge.JudgeUnavailable:
+                    scr = {}
+                rows, nds, model = run_batch(cfg, tx, part, scr, cat, role)
+                rows, notes = settle(tx, rows, nds, scr, part, model)
             for r in rows:
                 if why:
                     r["redo"] = why
@@ -777,7 +778,11 @@ def cmd_catalog(loader, argv: list[str]) -> int:
         return 1
     if a.cmd in ("stats", "list", "drafts", "get"):          # read-only: usable from read-only sandboxes
         return {"stats": _stats, "list": _list, "drafts": _drafts, "get": _get}[a.cmd](cfg, a)
-    events.new_run("classify")
+    with events.run(cfg.paths.state, "classify"):
+        return _write_cmd(cfg, a)
+
+
+def _write_cmd(cfg, a) -> int:
     if a.cmd == "backlog":
         from memexos import lock
         try:

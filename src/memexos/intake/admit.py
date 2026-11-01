@@ -381,22 +381,28 @@ def run(cfg, a) -> int:
             run_id = events.current_run()
             retry = [{"url": u, "via": f.get("via", "")} for u, f in st.get("capture_failures", {}).items() if f.get("n", 0) < 3]
             if retry:
-                with lock.held(cfg.paths.locks, "write", wait=5400):
+                with lock.held(cfg.paths.locks, "write", wait=5400), events.step(cfg.paths.state, "capture", items=len(retry), retry=True):
                     capture(cfg, retry, st)
-            batches = plan(cfg, a, st)
+            with events.step(cfg.paths.state, "collect") as info:
+                batches = plan(cfg, a, st)
+                info.update(batches=len(batches), items=sum(len(b) for _, b in batches))
             save_state(cfg, st)
             events.emit(cfg.paths.state, "intake.run", batches=len(batches), items=sum(len(b) for _, b in batches))
             total = {"admit": 0, "reject": 0, "uncertain": 0, "blocked": 0, "missing": 0}
             for i, (kind, items) in enumerate(batches, 1):
                 workdir = cfg.paths.state / "intake" / run_id / f"{i:03d}-{kind}"
                 workdir.mkdir(parents=True, exist_ok=True)
-                r = run_agent(cfg, kind, items, workdir)
+                with events.step(cfg.paths.state, "admit", channel=kind, items=len(items)) as info:
+                    r = run_agent(cfg, kind, items, workdir)
+                    info.update(ok=r.ok, cost_usd=r.cost_usd)
                 if r.limited:
                     events.emit(cfg.paths.state, "intake.quota", why=r.tail[-200:])
                     break
                 with lock.held(cfg.paths.locks, "write", wait=5400):
                     stats, links = post_process(cfg, workdir, items, kind, secrets, run_id, RawIndex(cfg))
-                    capture(cfg, links, st)
+                    if links:
+                        with events.step(cfg.paths.state, "capture", items=len(links)):
+                            capture(cfg, links, st)
                     commit(cfg, f"intake {run_id} batch {i}: " + ", ".join(f"{k} {v}" for k, v in stats.items() if v))
                 for k in total:
                     total[k] += stats.get(k, 0)
@@ -425,5 +431,5 @@ def cmd_intake(loader, argv: list[str]) -> int:
         print(i18n.t("cli.no_vault", path=cfg.vault), file=sys.stderr)
         return 1
     a.since_days = a.since_days if a.since_days is not None else float(cfg.get("intake.since_days") or 30)
-    events.new_run("intake")
-    return run(cfg, a)
+    with events.run(cfg.paths.state, "intake"):
+        return run(cfg, a)

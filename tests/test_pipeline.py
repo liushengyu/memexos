@@ -153,3 +153,20 @@ def test_fix_repairs_minor_problems_of_published_batches(vault, monkeypatch):
     assert not C.unfixed_reviews(cfg)
     assert "(fixed)" in (vault / "wiki" / "sources" / "example-source1.md").read_text()
     assert "fix:" in git(vault, "log", "-1", "--format=%s")
+
+
+def test_timeline_records_each_step_of_a_batch(vault):
+    from memexos import events, runs
+    FakeReviewer.script = ["fail", "pass"]
+    cfg = cfg_for(vault)
+    with events.run(cfg.paths.state, "ingest"):
+        assert C.ingest(cfg) == 0
+    units = [u for u in runs.timeline(cfg.paths.state, 0) if u["kind"] == "batch"]
+    assert len(units) == 1
+    u = units[0]
+    assert u["status"] == "published" and u["job"] == "ingest" and u["branch"].startswith("staging/")
+    steps = [s["step"] for s in u["segs"]]
+    assert steps[:2] == ["classify", "write"] and steps.count("gate2") == 2 and "rework" in steps
+    assert [g["passed"] for g in u["gate2"]] == [False, True]
+    assert all(s["t1"] is not None for s in u["segs"])
+    assert any(m["type"] == "publish" for m in u["marks"])

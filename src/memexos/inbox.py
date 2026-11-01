@@ -239,11 +239,14 @@ def triage(cfg, max_n: int = 0, workers: int = 4) -> int:
         return got
 
     done = 0
-    with cf.ThreadPoolExecutor(workers) as ex:
-        for got in ex.map(one, list(_batches(todo))):
-            done += got
-    dedupe(cfg)
-    rank(cfg)
+    with events.step(cfg.paths.state, "triage", items=len(todo)) as info:
+        if todo:
+            with cf.ThreadPoolExecutor(workers) as ex:
+                for got in ex.map(one, list(_batches(todo))):
+                    done += got
+            dedupe(cfg)
+        rank(cfg)
+        info["done"] = done
     return done
 
 
@@ -440,9 +443,11 @@ def research(cfg, max_n: int, min_score: float = 0.4) -> int:
     parts = [f"=== id: {it['id']} ===\n{(it['triage'] or {}).get('agent_task', '')}\n### {it['title']}\n{it['body'][:2500]}\n" for it in todo]
     work = sdir(cfg) / "research" / time.strftime("%Y%m%d-%H%M%S")
     before = {p for p in cfg.paths.raw.glob("*")}
-    r = backends.agent(cfg, "worker", i18n.prompt("inbox_research", memex=" ".join(me), items="\n".join(parts)), cwd=cfg.vault,
-                       workdir=work, policy=backends.Policy(commands=[me + ["add-url"]], web=True, network=True), effort="medium",
-                       timeout=3600, schema=RESEARCH_SCHEMA, job="inbox")
+    with events.step(cfg.paths.state, "research", items=len(todo)) as info:
+        r = backends.agent(cfg, "worker", i18n.prompt("inbox_research", memex=" ".join(me), items="\n".join(parts)), cwd=cfg.vault,
+                           workdir=work, policy=backends.Policy(commands=[me + ["add-url"]], web=True, network=True), effort="medium",
+                           timeout=3600, schema=RESEARCH_SCHEMA, job="inbox")
+        info.update(ok=r.ok, cost_usd=r.cost_usd)
     new = {p.relative_to(cfg.vault).as_posix() for p in set(cfg.paths.raw.glob("*")) - before}
     want, n = {it["id"] for it in todo}, 0
     for x in (r.result or {}).get("items", []) if r.ok and isinstance(r.result, dict) else []:
@@ -480,8 +485,10 @@ def investigate(cfg, max_n: int, min_score: float) -> int:
                          commands=", ".join(" ".join(c) for c in READ_ONLY_COMMANDS), visual=i18n.t("inbox.visual_hint", memex=" ".join(me)),
                          today=datetime.date.today().isoformat(), items="\n".join(parts))
     pol = backends.Policy(write=[work], read=[cfg.vault, *roots], commands=commands, deny_read=DENY_READ)
-    r = backends.agent(cfg, "worker", prompt, cwd=work, workdir=work / ".run", policy=pol, effort="high", timeout=5400,
-                       schema=INVESTIGATE_SCHEMA, job="inbox")
+    with events.step(cfg.paths.state, "investigate", items=len(todo)) as info:
+        r = backends.agent(cfg, "worker", prompt, cwd=work, workdir=work / ".run", policy=pol, effort="high", timeout=5400,
+                           schema=INVESTIGATE_SCHEMA, job="inbox")
+        info.update(ok=r.ok, cost_usd=r.cost_usd)
     secrets = known_secrets(cfg)
     want, n = {it["id"]: it for it in todo}, 0
     for x in (r.result or {}).get("items", []) if r.ok and isinstance(r.result, dict) else []:
@@ -627,7 +634,13 @@ def cmd_inbox(loader, argv: list[str]) -> int:
             for (k, s), n in sorted(collections.Counter((it["kind"] or "-", it["status"]) for it in items).items()):
                 print(f"{k:8} {s:10} {n}")
         return 0
-    events.new_run("inbox")
+    if a.action in ("triage", "rank", "apply"):          # model work: a run on the timeline; bookkeeping is not
+        with events.run(cfg.paths.state, "inbox"):
+            return _write_action(cfg, a)
+    return _write_action(cfg, a)
+
+
+def _write_action(cfg, a) -> int:
     if a.action == "triage":
         print(i18n.t("inbox.triaged", n=triage(cfg, a.max)))
     elif a.action == "rank":

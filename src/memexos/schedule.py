@@ -258,6 +258,11 @@ STEPS = {
 }
 
 
+# the job name a nightly step's events carry (the timeline groups and colours work by job)
+JOB_OF = {"visual": "visual", "classify": "classify", "catalog-sync": "classify", "eval-cover": "eval", "usage-judge": "usage",
+          "usage-verify": "usage", "fix": "fix", "inbox-triage": "inbox", "inbox-apply": "inbox"}
+
+
 def _classify_backlog(cfg):
     from memexos.catalog import classify as C
     rels = C.todo(cfg, C.all_raws(cfg), C.load(cfg))
@@ -279,37 +284,38 @@ def cmd_nightly(loader, argv: list[str]) -> int:
     ap.add_argument("--skip-intake", action="store_true")
     a = ap.parse_args(argv)
     cfg = loader()
-    events.new_run("nightly")
     if a.if_stale:
-        last = next((e for e in reversed(list(events.read(cfg.paths.state, types=("nightly.done",))))), None)
-        if last and time.time() - events._epoch(last["ts"]) < a.if_stale * 3600:
+        last = next((e for e in reversed(list(events.read(cfg.paths.state, since=time.time() - a.if_stale * 3600,
+                                                              types=("nightly.done",))))), None)
+        if last:
             return 0
-    events.emit(cfg.paths.state, "run.start")
-    t0 = time.time()
-    if not a.skip_intake:
-        from memexos.intake import admit
-        ns = argparse.Namespace(source="all", since_days=float(cfg.get("intake.since_days") or 30), limit=None, keys=None, if_stale=0)
-        try:
-            admit.run(cfg, ns)
-        except Exception as e:  # noqa: BLE001 — one failing step must not stop the night
-            events.emit(cfg.paths.state, "nightly.step_failed", step="intake", why=repr(e)[:300])
     from memexos.pipeline.compile import ingest
-    for step in cfg.get("schedule.nightly") or []:
-        fn = STEPS.get(step)
-        if not fn:
-            events.emit(cfg.paths.state, "nightly.step_failed", step=step, why="unknown step")
-            continue
+    with events.run(cfg.paths.state, "nightly"):
+        if not a.skip_intake:
+            from memexos.intake import admit
+            ns = argparse.Namespace(source="all", since_days=float(cfg.get("intake.since_days") or 30), limit=None, keys=None, if_stale=0)
+            try:
+                with events.job("intake"):
+                    admit.run(cfg, ns)
+            except Exception as e:  # noqa: BLE001 — one failing step must not stop the night
+                events.emit(cfg.paths.state, "nightly.step_failed", step="intake", why=repr(e)[:300])
+        for step in cfg.get("schedule.nightly") or []:
+            fn = STEPS.get(step)
+            if not fn:
+                events.emit(cfg.paths.state, "nightly.step_failed", step=step, why="unknown step")
+                continue
+            try:
+                with events.job(JOB_OF.get(step, step)):
+                    fn(cfg)
+                events.emit(cfg.paths.state, "nightly.step", step=step)
+            except Exception as e:  # noqa: BLE001
+                events.emit(cfg.paths.state, "nightly.step_failed", step=step, why=repr(e)[:300])
         try:
-            fn(cfg)
-            events.emit(cfg.paths.state, "nightly.step", step=step)
+            with events.job("ingest"):
+                ingest(cfg)              # compile whatever the night collected
         except Exception as e:  # noqa: BLE001
-            events.emit(cfg.paths.state, "nightly.step_failed", step=step, why=repr(e)[:300])
-    try:
-        ingest(cfg)              # compile whatever the night collected
-    except Exception as e:  # noqa: BLE001
-        events.emit(cfg.paths.state, "nightly.step_failed", step="ingest", why=repr(e)[:300])
-    events.emit(cfg.paths.state, "nightly.done")
-    events.emit(cfg.paths.state, "run.end", seconds=round(time.time() - t0))
+            events.emit(cfg.paths.state, "nightly.step_failed", step="ingest", why=repr(e)[:300])
+        events.emit(cfg.paths.state, "nightly.done")
     return 0
 
 

@@ -4,13 +4,20 @@ Structured calls run in Codex's read-only sandbox, where it may run read-only co
 calls run in the workspace-write sandbox rooted at cwd; extra writable paths are added with --add-dir. Codex
 sandboxes commands rather than allow-listing them, so Policy.commands is advisory here (stated in the prompt).
 Runs are ephemeral: they leave no session files behind (which would otherwise be collected as conversations).
+
+Runs are isolated from the person's own Codex setup (`isolate = true`): the user config.toml (MCP servers, personal
+instructions, profiles) and execpolicy rules are not loaded; only the login is shared. The model named in the user
+config is still used unless backends.codex.model says otherwise. A user config that routes Codex through a custom
+model provider cannot be dropped, so isolation is skipped there (memex doctor says so).
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import time
+import tomllib
 from pathlib import Path
 
 from memexos.backends.base import NETWORK_RE, QUOTA_RE, Backend, Policy, Result
@@ -54,6 +61,18 @@ def _final_text(events: Path) -> str:
     return last
 
 
+def codex_home() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex"))
+
+
+@functools.cache
+def user_config(home: str) -> dict:
+    try:
+        return tomllib.loads((Path(home) / "config.toml").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 class Codex(Backend):
     name = "codex"
 
@@ -63,10 +82,20 @@ class Codex(Backend):
     def available(self) -> tuple[bool, str]:
         return (True, "") if self.exe() else (False, f"command `{self.section.get('command') or 'codex'}` not found")
 
+    def isolated(self) -> bool:
+        uc = user_config(str(codex_home()))
+        custom_provider = (uc.get("model_provider") or "openai") != "openai"
+        return self.section.get("isolate", True) is not False and not custom_provider
+
+    def model(self) -> str:
+        return self.section.get("model") or str(user_config(str(codex_home())).get("model") or "")
+
     def _cmd(self, sandbox: str, cwd: Path, effort: str, extra: list[str]) -> list[str]:
         cmd = [self.exe() or "codex", "exec"]
-        if self.section.get("model"):
-            cmd += ["-m", self.section["model"]]
+        if self.isolated():
+            cmd += ["--ignore-user-config", "--ignore-rules"]
+        if self.model():
+            cmd += ["-m", self.model()]
         cmd += ["-c", f"model_reasoning_effort={effort or self.section.get('effort') or 'high'}", "-s", sandbox, "-C", str(cwd),
                 "--skip-git-repo-check", "--ephemeral", "--json", *extra]
         return cmd
@@ -86,7 +115,7 @@ class Codex(Backend):
         except Exception as e:  # noqa: BLE001
             rc = "timeout" if "Timeout" in type(e).__name__ else "error"
             err.write_text(repr(e), encoding="utf-8")
-        res = Result(ok=False, backend=self.name, model=self.section.get("model") or "", rc=rc,
+        res = Result(ok=False, backend=self.name, model=self.model(), rc=rc,
                      elapsed_s=round(time.time() - t0, 1), usage=_usage(events))
         text = ""
         try:

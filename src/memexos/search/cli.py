@@ -113,6 +113,7 @@ def cmd_search(loader, argv: list[str]) -> int:
         return 1
     t0 = time.time()
     hits, kws, degraded = engine.search(cfg, a.query, a.kw.split() if a.kw else None, a.n, a.mode, a.inbox or None)
+    note_search(cfg, a.query, a.mode, len(hits), time.time() - t0)
     if a.json:
         print(json.dumps({"degraded": degraded, "keywords": kws, "hits": [
             {**{k: h.get(k) for k in ("path", "title", "snippet")},
@@ -135,6 +136,14 @@ def cmd_search(loader, argv: list[str]) -> int:
     if not hits:
         print(i18n.t("search.nothing"))
     return 0
+
+
+def note_search(cfg, query: str, mode: str, hits: int, seconds: float, job: str = "search") -> None:
+    """Best effort: lets the status view and the console see that agents are searching. Read-only sandboxes skip it."""
+    try:
+        events.emit(cfg.paths.state, "search", job=job, query=query[:160], mode=mode, hits=hits, seconds=round(seconds, 2))
+    except OSError:
+        pass
 
 
 def resolve_page(vault: Path, target: str) -> str | None:
@@ -178,7 +187,12 @@ def cmd_reindex(loader, argv: list[str]) -> int:
     cfg = loader()
     if _no_vault(cfg):
         return 1
-    events.new_run("reindex")
+    with events.run(cfg.paths.state, "reindex"):
+        return _reindex(cfg, a)
+
+
+def _reindex(cfg, a) -> int:
+    from memexos import lock
     try:
         with lock.held(cfg.paths.locks, "reindex"):
             r = fts.update(cfg.vault, cfg.paths.search_index)

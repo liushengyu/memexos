@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="__LANG__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MemexOS</title>
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/app/core.css">
+<link rel="stylesheet" href="/app/views.css">
+<script nonce="__NONCE__">window.BOOT = __BOOT__;</script>
+</head>
+<body>
+<div id="l0"></div><canvas id="l1"></canvas><canvas id="l2"></canvas><div id="l3"></div><div id="vig"></div>
+
+<header id="top" class="glass">
+  <div class="brand" data-tip="{{top.brand_tip}}">
+    <svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="4.2" fill="#f2f5f9"/><g class="orb-a"><ellipse cx="13" cy="13" rx="11" ry="4.6" fill="none" stroke="#5b8cff" stroke-width="1.2"/><circle cx="24" cy="13" r="1.7" fill="#e7c792"/></g>
+      <g class="orb-b"><ellipse cx="13" cy="13" rx="4.6" ry="11" fill="none" stroke="rgba(223,231,241,.55)" stroke-width="1"/></g></svg>
+    <div class="t">MemexOS<small>MEMEX//OS</small></div>
+  </div>
+  <nav id="nav"><span id="hov"></span><span id="ind"></span>
+    <a data-v="overview"><svg class="ni" viewBox="0 0 14 14"><circle cx="7" cy="7" r="2.1"/><circle cx="7" cy="7" r="5.4" fill="none"/></svg>{{nav.overview}}</a><a data-v="inbox"><svg class="ni" viewBox="0 0 14 14"><path d="M1.6 8.4 3.6 3h6.8l2 5.4V11.6H1.6Z M1.6 8.4h3l1 1.5h2.8l1-1.5h3" fill="none"/></svg>{{nav.inbox}}<span class="bdg" hidden></span></a><a data-v="knowledge"><svg class="ni" viewBox="0 0 14 14"><path d="M7 1.6 12.4 4.5 7 7.4 1.6 4.5Z" fill="none"/><path d="M1.6 7 7 9.9 12.4 7 M1.6 9.5 7 12.4 12.4 9.5" fill="none"/></svg>{{nav.knowledge}}</a><a data-v="tasks"><svg class="ni" viewBox="0 0 14 14"><path d="M2.6 7h8.8" fill="none"/><circle cx="2.6" cy="7" r="1.6"/><circle cx="7" cy="7" r="1.6"/><circle cx="11.4" cy="7" r="1.6"/></svg>{{nav.tasks}}</a>
+    <a data-v="usage"><svg class="ni" viewBox="0 0 14 14"><path d="M1 7.6h2.6L5.1 3.4 8 11l1.5-3.8H13" fill="none"/></svg>{{nav.usage}}</a><a data-v="quality"><svg class="ni" viewBox="0 0 14 14"><path d="M2.1 10.4a5.2 5.2 0 1 1 9.8 0" fill="none"/><path d="M7 8.6 9.6 5.2" fill="none"/></svg>{{nav.quality}}</a><a data-v="profile"><svg class="ni" viewBox="0 0 14 14"><circle cx="7" cy="4.6" r="2.3" fill="none"/><path d="M2.4 12.6c.6-3 2.6-4.3 4.6-4.3s4 1.3 4.6 4.3" fill="none"/></svg>{{nav.profile}}</a></nav>
+  <div class="hdr-r">
+    <div class="chip click" id="sys"><i class="dot"></i><span>{{top.connecting}}</span></div>
+    <div class="chip warm click" id="ibx-chip" hidden data-tip="{{top.inbox_tip}}">⚑ <span id="ibx-n" class="mono">0</span> {{top.inbox_waiting}}</div>
+    <div class="chip click" id="cmdk-btn" data-tip="{{top.search_tip}}">{{top.search}} <span class="k">⌘K</span></div>
+    <div id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main id="app">
+  <section class="view" id="v-overview" hidden></section>
+  <section class="view" id="v-inbox" hidden></section>
+  <section class="view" id="v-knowledge" hidden></section>
+  <section class="view" id="v-tasks" hidden></section>
+  <section class="view" id="v-usage" hidden></section>
+  <section class="view" id="v-quality" hidden></section>
+  <section class="view" id="v-profile" hidden></section>
+</main>
+
+<div id="scrim"></div>
+<aside id="drawer" class="glass">
+  <div class="dh"><div style="flex:1;min-width:0"><div class="tt" id="d-title"></div><div id="d-sub" style="margin-top:4px"></div></div>
+    <button class="btn sm ghost" id="d-graph" hidden>◎ {{drawer.on_globe}}</button><button class="btn sm ghost" id="d-close">{{c.close}} <span class="k">ESC</span></button></div>
+  <div class="db"><div id="d-main"></div><div class="side" id="d-side"></div></div>
+</aside>
+<div id="cmdk" class="glass sweep"><input class="inp" placeholder="{{cmd.placeholder}}" autocomplete="off"><div class="res"></div></div>
+<div id="tip"></div><div id="toasts"></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="lens" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+  <feImage id="lensmap" preserveAspectRatio="none" result="map"/><feDisplacementMap in="SourceGraphic" in2="map" scale="26" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
+
+<script src="/app/core.js"></script>
+<script src="/app/graph3d.js"></script>
+<script src="/app/views/overview.js"></script>
+<script src="/app/views/inbox.js"></script>
+<script src="/app/views/knowledge.js"></script>
+<script src="/app/views/tasks.js"></script>
+<script src="/app/views/usage.js"></script>
+<script src="/app/views/quality.js"></script>
+<script src="/app/views/profile.js"></script>
+<script src="/app/boot.js"></script>
+</body>
+</html>

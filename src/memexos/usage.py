@@ -29,6 +29,7 @@ import time
 from pathlib import Path
 
 from memexos import backends, i18n
+from memexos import events as event_log
 from memexos.intake import sessions as S
 from memexos.util import append_jsonl, atomic_write, read_jsonl
 
@@ -328,8 +329,10 @@ def verify(cfg, max_n: int = 10) -> int:
             q = (f.get("question") or "").strip()
             prompt = i18n.prompt("usage_verify", page=f.get("page"), kind=f.get("kind"), why=f.get("why"), evidence=f.get("evidence") or "-",
                                  question=i18n.t("usage.asked", q=q[:600]) if q else "")
-        r = backends.structured(cfg, "worker", prompt, VERIFY_SCHEMA, cwd=cfg.vault, workdir=dirs(cfg) / "verify" / f["fid"],
-                                effort="high", timeout=1800, job="usage")
+        with event_log.step(cfg.paths.state, "verify", page=f.get("page")) as info:
+            r = backends.structured(cfg, "worker", prompt, VERIFY_SCHEMA, cwd=cfg.vault, workdir=dirs(cfg) / "verify" / f["fid"],
+                                    effort="high", timeout=1800, job="usage")
+            info.update(ok=r.ok, result=(r.result or {}).get("verdict") if r.ok else "error")
         if not r.ok:
             continue
         res = r.result
@@ -363,8 +366,10 @@ def judge_usage(cfg, max_n: int = 40) -> int:
             searched = [c.get("query") for c in e["calls"] if c["op"] == "search"]
             recs.append(f"### {i}\n- question: {e['question'][:1500]}\n- searched: {'; '.join(x for x in searched if x) or '-'}\n"
                         f"- opened: {'; '.join(x for x in opened if x) or '-'}\n- final answer (excerpt): {e['answer'][:2500]}\n")
-        r = backends.structured(cfg, "worker", i18n.prompt("usage_judge", records="\n".join(recs)), JUDGE_SCHEMA, cwd=cfg.vault,
-                                workdir=d / "judge" / time.strftime("%Y%m%d-%H%M%S"), effort="medium", timeout=1800, job="usage")
+        with event_log.step(cfg.paths.state, "usage", questions=len(batch)) as info:
+            r = backends.structured(cfg, "worker", i18n.prompt("usage_judge", records="\n".join(recs)), JUDGE_SCHEMA, cwd=cfg.vault,
+                                    workdir=d / "judge" / time.strftime("%Y%m%d-%H%M%S"), effort="medium", timeout=1800, job="usage")
+            info["ok"] = r.ok
         if not r.ok:
             continue
         rows, fb, srcerr = [], [], []
@@ -415,6 +420,7 @@ def summary(cfg, days: int = 7, include_eval: bool = False, refresh: bool = True
     clear = [r for r in judged if r["verdict"] != "unclear"]
     for e in recent:
         e["verdict"] = jd.get(e["key"], {}).get("verdict")
+        e["verdict_reason"] = jd.get(e["key"], {}).get("reason", "")
     return {"days": days, "scanned": scanned, "n_new": n_new, "n_all": n_all, "n_recent": len(recent),
             "by_agent": collections.Counter(e["agent"] for e in recent).most_common(),
             "projects": collections.Counter(Path(e["cwd"].rstrip("/")).name or "?" for e in recent).most_common(),
@@ -428,7 +434,7 @@ def summary(cfg, days: int = 7, include_eval: bool = False, refresh: bool = True
             "feedback": all_feedback(cfg, events),
             "per_day": sorted(collections.Counter((e.get("session_last") or "")[:10] for e in recent).items()),
             "events": [{k: e.get(k) for k in ("key", "agent", "cwd", "session_last", "question", "calls", "answer", "cited", "said_not_found",
-                                               "verdict", "kind")} for e in sorted(recent, key=lambda e: e.get("session_last") or "", reverse=True)[:200]]}
+                                               "verdict", "verdict_reason", "kind")} for e in sorted(recent, key=lambda e: e.get("session_last") or "", reverse=True)[:200]]}
 
 
 def report_text(cfg, days: int = 7, include_eval: bool = False) -> str:
@@ -461,12 +467,12 @@ def cmd_usage(loader, argv: list[str]) -> int:
         print(i18n.t("usage.extracted", **dict(zip(("scanned", "new", "total"), extract(cfg)))))
     elif a.action == "judge":
         from memexos import events
-        events.new_run("usage")
-        print(i18n.t("usage.judge_done", n=judge_usage(cfg, a.max or 40)))
+        with event_log.run(cfg.paths.state, "usage"):
+            print(i18n.t("usage.judge_done", n=judge_usage(cfg, a.max or 40)))
     elif a.action == "verify":
         from memexos import events
-        events.new_run("usage")
-        print(i18n.t("usage.verify_done", n=verify(cfg, a.max or 10)))
+        with event_log.run(cfg.paths.state, "usage"):
+            print(i18n.t("usage.verify_done", n=verify(cfg, a.max or 10)))
     else:
         print(report_text(cfg, a.days, a.all))
     return 0

@@ -1,0 +1,5 @@
+/* Bundled fonts (SIL Open Font License 1.1, see OFL.txt) so the console works offline. Sora and JetBrains Mono are variable fonts. */
+@font-face { font-family: 'Instrument Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url(/fonts/InstrumentSerif-400.woff2) format('woff2'); }
+@font-face { font-family: 'Instrument Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url(/fonts/InstrumentSerif-400i.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400 500; font-display: swap; src: url(/fonts/JetBrainsMono.woff2) format('woff2'); }
+@font-face { font-family: 'Sora'; font-style: normal; font-weight: 400 600; font-display: swap; src: url(/fonts/Sora.woff2) format('woff2'); }

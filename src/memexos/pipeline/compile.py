@@ -58,11 +58,19 @@ class Writer:
         return backends.agent(self.cfg, "writer", prompt, cwd=self.stage.dir, workdir=wd, policy=self.policy(),
                               timeout=float(self.cfg.get("pipeline.writer_timeout") or 5400), job=self.job)
 
-    def write(self, prompt: str, kind: str) -> int:
-        """0 = written and gate 1 passed; 1 = the writer failed; 2 = gate 1 still fails after the rework rounds."""
+    def _step(self, name: str, prompt: str, **data) -> backends.Result:
+        with events.step(self.cfg.paths.state, name, **data) as info:
+            r = self._agent(prompt)
+            info.update(ok=r.ok, model=r.model, cost_usd=r.cost_usd)
+        return r
+
+    def write(self, prompt: str, kind: str, step: str = "write", reason: str = "") -> int:
+        """0 = written and gate 1 passed; 1 = the writer failed; 2 = gate 1 still fails after the rework rounds.
+        `step` names the timeline segment: write for a first draft, rework when answering a check."""
         p, attempt = prompt, 0
+        extra = {"reason": reason} if reason else {}
         while True:
-            r = self._agent(p)
+            r = self._step(step, p, **extra)
             if r.denials:
                 events.emit(self.cfg.paths.state, "writer.denials", count=len(r.denials), example=r.denials[0])
             if r.ok:
@@ -92,7 +100,7 @@ class Writer:
                 return 0
             if rnd == rounds:
                 return 2
-            r = self._agent(i18n.prompt("rework_gate1", kind=kind, report=fence(self.report)))
+            r = self._step("rework", i18n.prompt("rework_gate1", kind=kind, report=fence(self.report)), reason="gate1")
             if not r.ok:
                 self.report = i18n.t("pipeline.writer_failed", backend=r.backend, why=r.tail[-300:])
                 return 1
@@ -110,9 +118,13 @@ def review(cfg, stage: Stage, raws: list[str], mode: str, job: str) -> tuple[int
     if (cfg.get("pipeline.gate2") or "enforce") == "off":
         return 4, {}, Path()
     d = g2_dir(cfg, stage, mode)
-    code, rep = gate2.run(cfg, stage.dir, stage.base, raws, d, mode=mode, job=job)
-    m = rep.get("metrics") or {}
-    events.emit(cfg.paths.state, "gate2.result", code=code, passed=rep.get("passed"), mode=mode, problems=len(report.problems(d)),
+    with events.step(cfg.paths.state, "gate2", mode=mode) as info:
+        code, rep = gate2.run(cfg, stage.dir, stage.base, raws, d, mode=mode, job=job)
+        m = rep.get("metrics") or {}
+        info.update(result={0: "passed", 1: "failed"}.get(code, "incomplete"), model=m.get("model"), cost_usd=m.get("cost_usd"),
+                    problems=len(report.problems(d)))
+    events.emit(cfg.paths.state, "gate2.result", code=code, passed=rep.get("passed") if code in (0, 1) else None, mode=mode,
+                problems=len(report.problems(d)),
                 backend=m.get("backend"), model=m.get("model"), seconds=m.get("elapsed_s"), cost_usd=m.get("cost_usd"),
                 dir=d.name)
     return code, rep, d
@@ -184,7 +196,7 @@ def review_loop(cfg, stage: Stage, writer: Writer, raws: list[str], mode: str, f
             return "failed", dirs, rep
         _, problems = report.for_writer([d])
         prompt = i18n.prompt(fix_prompt_key, problems=fence(problems), what=what)
-        c = writer.write(prompt, "ingest" if mode == "ingest" else "lint")
+        c = writer.write(prompt, "ingest" if mode == "ingest" else "lint", step="rework", reason="gate2")
         if c != 0:
             return "writer-failed", dirs, {"errors": [writer.report]}
         code, rep, d = review(cfg, stage, raws, "fix", job)
@@ -216,18 +228,20 @@ def ingest_batch(cfg) -> int:
     w = Writer(cfg, stage, job)
     c = w.write(prompt, "ingest")
     if c == 1:
-        stage.discard(w.report)
         events.emit(cfg.paths.state, "ingest.failed", why=w.report[-300:])
+        stage.discard(w.report)
         return 1
     if c == 2:
         stage.hold(i18n.t("pipeline.gate1_failed", rounds=cfg.get("pipeline.gate1_fix_rounds") or 2), raws, w.report)
         return 1
     events.emit(cfg.paths.state, "writer.done", summary=w.last)
     if (cfg.get("pipeline.selfcheck") or "on") != "off":
-        sc, flagged, summary = selfcheck.run(cfg, stage.dir, stage.base, raws)
+        with events.step(cfg.paths.state, "selfcheck") as info:
+            sc, flagged, summary = selfcheck.run(cfg, stage.dir, stage.base, raws)
+            info["result"] = {0: "passed", 1: "flagged"}.get(sc, "skipped")
         events.emit(cfg.paths.state, "selfcheck.result", code=sc, summary=summary)
         if sc == 1:
-            c = w.write(i18n.prompt("selfcheck", flagged=fence(flagged)), "ingest")
+            c = w.write(i18n.prompt("selfcheck", flagged=fence(flagged)), "ingest", step="rework", reason="selfcheck")
             if c == 2:
                 stage.hold(i18n.t("pipeline.selfcheck_gate1"), raws, w.report)
                 return 1
@@ -450,14 +464,8 @@ def main(loader, argv: list[str], job: str) -> int:
     if not (cfg.vault / "raw").is_dir():
         print(i18n.t("cli.no_vault", path=cfg.vault))
         return 1
-    events.new_run(job)
-    t0 = time.time()
-    events.emit(cfg.paths.state, "run.start")
-    try:
-        rc = {"ingest": ingest, "lint": lint, "fix": fix, "correct": correct}[job](cfg)
-    finally:
-        events.emit(cfg.paths.state, "run.end", seconds=round(time.time() - t0))
-    return rc
+    with events.run(cfg.paths.state, job):
+        return {"ingest": ingest, "lint": lint, "fix": fix, "correct": correct}[job](cfg)
 
 
 def cmd_ingest(loader, argv):
