@@ -66,7 +66,7 @@ sources:
 You need macOS or Linux (on Windows, use WSL), git and curl. The installer sets up everything else, asking first:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/OWNER/memexos/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/liushengyu/memexos/main/install.sh | sh
 ```
 
 It installs, in this order:
@@ -79,7 +79,7 @@ It installs, in this order:
 5. `memex setup`: a few questions, then your knowledge base is created (with sample content if you like).
 
 Prefer to have your agent do it? Give Claude Code or Codex the prompt in [docs/install-prompt.md](docs/install-prompt.md).
-By hand: `uv tool install --with anthropic git+https://github.com/OWNER/memexos`, `npm install -g @tobilu/qmd`,
+By hand: `uv tool install --with anthropic git+https://github.com/liushengyu/memexos`, `npm install -g @tobilu/qmd`,
 then `memex setup`. `memex doctor` checks everything at any time and says how to fix what is missing.
 
 ## Quick start

@@ -1,7 +1,7 @@
 #!/bin/sh
 # MemexOS installer for macOS and Linux (on Windows, run it inside WSL).
 #
-#   curl -fsSL https://raw.githubusercontent.com/OWNER/memexos/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/liushengyu/memexos/main/install.sh | sh
 #   sh install.sh [--yes] [--minimal] [--no-setup]
 #
 #   --yes        accept every default without asking
@@ -23,7 +23,7 @@
 
 set -eu
 
-REPO="https://github.com/OWNER/memexos"
+REPO="https://github.com/liushengyu/memexos"
 NODE_LINE="latest-v24.x"
 WHISPER_MODEL="ggml-large-v3-turbo-q5_0.bin"
 WHISPER_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$WHISPER_MODEL"

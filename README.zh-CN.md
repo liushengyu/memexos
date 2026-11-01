@@ -59,7 +59,7 @@ wiki 是“一个持续积累、越用越值钱的成果”：人之所以放弃
 需要 macOS 或 Linux（Windows 请用 WSL）、git 和 curl。其余的由安装脚本装好，每一步都会先问你：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/OWNER/memexos/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/liushengyu/memexos/main/install.sh | sh
 ```
 
 它按这个顺序安装：
@@ -72,7 +72,7 @@ curl -fsSL https://raw.githubusercontent.com/OWNER/memexos/main/install.sh | sh
 5. `memex setup`：问你几个问题，然后建好你的知识库（愿意的话带上示例内容）。
 
 想让 Agent 替你装？把 [docs/install-prompt.md](docs/install-prompt.md) 里的提示词交给 Claude Code 或 Codex。
-手动安装：`uv tool install --with anthropic git+https://github.com/OWNER/memexos`、`npm install -g @tobilu/qmd`，
+手动安装：`uv tool install --with anthropic git+https://github.com/liushengyu/memexos`、`npm install -g @tobilu/qmd`，
 再运行 `memex setup`。任何时候都可以用 `memex doctor` 检查一遍，它会说清缺什么、怎么补。
 
 ## 快速开始

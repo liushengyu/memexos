@@ -6,7 +6,7 @@ a choice is yours.
 
 ---
 
-Install and set up MemexOS (https://github.com/OWNER/memexos), a self-maintaining personal knowledge base, on this
+Install and set up MemexOS (https://github.com/liushengyu/memexos), a self-maintaining personal knowledge base, on this
 machine for me.
 
 **Done means:**
