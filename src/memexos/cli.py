@@ -38,6 +38,12 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "sessions": ("memexos.intake.sessions", "cmd_sessions"),
     "intake": ("memexos.intake.admit", "cmd_intake"),
     "catalog": ("memexos.catalog.classify", "cmd_catalog"),
+    "usage": ("memexos.usage", "cmd_usage"),
+    "inbox": ("memexos.inbox", "cmd_inbox"),
+    "status": ("memexos.status", "cmd_status"),
+    "schedule": ("memexos.schedule", "cmd_schedule"),
+    "nightly": ("memexos.schedule", "cmd_nightly"),
+    "feedback": ("memexos.usage", "cmd_feedback"),
     "resume": ("memexos.cli", "cmd_resume"),
 }
 
