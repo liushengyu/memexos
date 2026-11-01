@@ -108,8 +108,60 @@ coverage, usage review, fix, inbox), a weekly lint, and the console. Jobs record
 one job writes at a time, and yield to waiting jobs between batches. `memex pause` stops compiling after the current
 batch.
 
-Everything a job does is written to a structured **event log** (`events.jsonl`): runs, steps with their duration and
-result, gate results, publishes, holds, model calls with their cost. `memex status` and the console are views over it.
+`memex setup` offers to install the schedule at the end; `memex schedule list` shows what is installed and
+`memex schedule remove` takes it all out again. Times and the nightly chain are in `[schedule]`.
+
+## The event log
+
+Every command that does work records what it does, as it does it, in a structured event log. Nothing is parsed out
+of human-readable logs afterwards: the code that does the work writes the event at the moment it happens, through one
+module (`memexos.events`). `memex status`, the console's activity feed, run timelines and spending are all built from
+these events.
+
+Where: `<state>/events/YYYY-MM.jsonl`, one JSON object per line, one file per month. Months older than
+`[state] keep_events_months` (12) are deleted. A plain-text mirror, `<state>/memex.log`, has one readable line per
+event in your language (rendered from the language pack); it is for people and is never read back.
+
+```json
+{"ts": "2026-11-01T12:09:59+0800", "run": "add-url-20261101-120958-6f1b", "job": "add-url",
+ "type": "step.end", "data": {"name": "capture", "seconds": 1.2}}
+```
+
+| Field | Meaning |
+|---|---|
+| `run` | one invocation of a command (`memex ingest`, the nightly chain, an evaluation…); nested commands carry their parent's run as `parent` |
+| `job` | the kind of work (ingest, intake, classify, eval…); the console colours and groups by it |
+| `type` | what happened; the table below |
+| `data` | the details, different per type |
+
+| Written by | Event types |
+|---|---|
+| every command run (`events.run`) | `run.start`, `run.end` (with result) |
+| every stage of work (`events.step`) | `step.start`, `step.end` with duration and result: collect, admit, capture, visual, classify, write, rework, selfcheck, gate2, index, embed, triage, research, investigate, usage, verify, eval_* |
+| every model call (`backends`, the Jev judge) | `model.call`: role, backend, model, seconds, tokens, cost in USD (API list price; for subscription logins this is what the same work would cost through the API) |
+| compiling | `ingest.start`, `stage.open`, `writer.done`, `writer.retry`, `writer.denials`, `gate1.result`, `selfcheck.result`, `gate2.result`, `gate2.unavailable`, `publish`, `hold`, `stage.discard`, `ingest.failed`, `ingest.waiting`, `fix.start`, `correct.start`, `correct.done` |
+| collecting | `intake.run`, `intake.batch`, `intake.channel_failed`, `intake.quota`, `intake.done`, `capture.done`, `capture.failed`, `capture.video`, `capture.redacted`, `visual.*` |
+| sorting | `classify.batch`, `classify.failed`, `catalog.sync`, `catalog.check` |
+| reading | `search`, `read` (every `memex search` / `memex get`, by agents or by you) |
+| the loop back | `feedback` (an agent reported a wrong page), `inbox.record_blocked` |
+| scheduling | `nightly.step`, `nightly.step_failed`, `nightly.done`, `index.update`, `index.qmd`, `eval.progress` |
+
+To record something new, use the same three calls the pipeline uses: `events.run(state, job)` around a command,
+`events.step(state, name)` around a stage (fill the yielded dict with results), and `events.emit(state, type, **data)`
+for a single fact. Add a line for the new type to `[event]` in each language pack so it reads well in the log and the
+console; a type without one still shows, as its raw name.
+
+Not everything the console shows is an event. Some things already have a better record of their own, and the console
+reads them directly:
+
+| What | Read from | Why not events |
+|---|---|---|
+| pages, links, growth, page history | the vault's files and its git history | git already records every change, with the full text |
+| classification | `.memex/catalog.jsonl`, the taxonomy files | they are the source of truth that classification maintains |
+| review findings | `<state>/gate2/<batch>/review.json` | the full report; `gate2.result` carries only the verdict and counts |
+| inbox | `inbox/*.md` and the decision log | they are what you read and answer |
+| how agents used the knowledge | your agents' own session logs (Claude Code, Codex), extracted into `<state>/usage/` | only the session shows what the agent did with the results; the `search`/`read` events show only the calls |
+| evaluation scores | `<state>/evals/…/summary.json` | the full report of each evaluation run |
 
 ## Models
 
@@ -123,11 +175,47 @@ Work is assigned to roles, and each role lists backends in order of preference (
 | vision | visual notes from video frames | Codex, then Claude Code |
 | judge | many small yes/no judgments (self-check, reranking, impact) | Claude Code with a small model |
 
-Backends: the Claude Code and Codex command lines (using whatever account they are logged in with) and the Anthropic
-API through the official SDK. A backend that runs out of quota is skipped for a while and the next one takes over.
-Agent runs get an explicit policy: writable paths, readable paths, allowed command prefixes, network on or off,
-paths never to read. Codex runs do not load your personal Codex configuration; Claude Code runs load no MCP servers
-and no user settings.
+Backends, any mix of them:
+
+| Type | What it is | Configure |
+|---|---|---|
+| `claude-code` | the Claude Code command line, with whatever account it is logged in with (subscription or API key) | nothing; `[backends.claude-code]` picks models per effort |
+| `codex` | the Codex command line, likewise | nothing; `[backends.codex]` |
+| `anthropic` | the Anthropic API through the official SDK (`pip install "memexos[anthropic]"`) | `ANTHROPIC_API_KEY` |
+| `openai` | any OpenAI-compatible Chat Completions API: OpenAI, Gemini, DeepSeek, Qwen, Kimi, OpenRouter, or a model on your own machine (Ollama, LM Studio, vLLM) | `base_url`, `model`, `api_key_env` in `[backends.<name>]` |
+
+Several `openai`-type endpoints can be defined side by side under different names, for example a hosted one for
+writing and a local one for the many small worker calls:
+
+```toml
+[backends.local]
+type = "openai"
+base_url = "http://127.0.0.1:11434/v1"
+model = "qwen3:14b"
+api_key_env = ""          # local servers need no key
+proxy = "direct"
+
+[models]
+worker = ["local", "claude-code"]
+```
+
+For the `openai` type MemexOS runs the agent loop itself, with sandboxed file tools enforced by its own process, so
+any model that supports tool calling can compile; answers are checked against the expected JSON schema and
+reformatted in one extra turn if needed. Smaller local models are fine for the worker and judge roles; writing and
+reviewing need a strong model.
+
+A backend that runs out of quota is skipped for a while and the next one takes over. Agent runs get an explicit
+policy: writable paths, readable paths, allowed command prefixes, network on or off, paths never to read. Codex runs
+do not load your personal Codex configuration; Claude Code runs load no MCP servers and no user settings.
+
+The judge (`[judge] backend`) answers many small yes/no and multiple-choice questions: is this sentence supported by
+the source, which category fits, is this search result relevant. `llm` (default) sends them in batches to the judge
+role's backends. `jev` uses Jev, a hosted model that returns calibrated probabilities; it needs `JEV_API_KEY`
+(`memex secret set JEV_API_KEY`, or `memex setup`) and sends the judged text to that service. `none` turns judging
+off; every caller has a path that works without it.
+
+`memex setup` detects which of these are installed and logged in, proposes roles, and writes the choices into your
+config; `memex doctor` shows the result at any time.
 
 ## Configuration
 

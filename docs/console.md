@@ -13,14 +13,23 @@ memex console stop | restart | status
 Settings: `console.host`, `console.port` (8765), `console.profile_page` (off). The language follows the vault's
 `language` setting.
 
+To look around without data of your own, build the demo installation used for the README screenshots: a generated
+knowledge base of about 200 pages with two weeks of simulated activity, in a separate home directory, calling no model:
+
+```
+uv run python tools/make_demo.py /tmp/memex-demo [--lang zh]
+HOME=/tmp/memex-demo/home PATH=/tmp/memex-demo/bin:$PATH memex console serve --port 8790
+```
+
 ## Where the data comes from
 
-The console never parses human-readable logs. Everything it shows is built from:
+The console never parses human-readable logs. Everything it shows is built from these structured sources (see
+"The event log" in [architecture.md](architecture.md) for who writes what):
 
 | What | Source |
 |---|---|
 | Pages, links, growth, history | `wiki/`, `raw/`, `index.md` and the vault's git history |
-| Runs and their timelines | the event log `<state>/events.jsonl` (`run.*`, `step.*`, `gate*.result`, `publish`, `hold`, `model.call`), rebuilt by `memexos.runs` |
+| Runs and their timelines, activity feed, spending | the event log `<state>/events/YYYY-MM.jsonl` (`run.*`, `step.*`, `gate*.result`, `publish`, `hold`, `model.call`…), rebuilt into timelines by `memexos.runs` |
 | Classification | `.memex/catalog.jsonl` and the taxonomy (`.memex/taxonomy.md`, `taxonomy-nodes.jsonl`) |
 | Review findings | `<state>/gate2/<batch>/review.json` |
 | Inbox | `inbox/*.md`, admission candidates, held batches, category proposals, and the decision log |
