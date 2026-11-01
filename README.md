@@ -42,7 +42,8 @@ uv tool install .          # or: pipx install .
 memex doctor               # what is available, what is missing, and how to fix it
 ```
 
-Optional: [qmd](https://github.com/tobi/qmd) for vector search, `yt-dlp` + `ffmpeg` + whisper.cpp for videos,
+Optional: [qmd](https://github.com/tobi/qmd) for vector search (its first indexing downloads models in the background; until it
+has finished, search uses the built-in full-text index), `yt-dlp` + `ffmpeg` + whisper.cpp for videos,
 `pdftotext` (poppler) for PDFs. `memex doctor` checks all of them.
 
 ## Quick start

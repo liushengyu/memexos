@@ -190,7 +190,6 @@ def cmd_get(loader, argv: list[str]) -> int:
 
 
 def cmd_reindex(loader, argv: list[str]) -> int:
-    from memexos import lock
     ap = argparse.ArgumentParser(prog="memex reindex")
     ap.add_argument("--no-embed", action="store_true", help="qmd: update the keyword index only, skip embeddings")
     a = ap.parse_args(argv)
@@ -202,6 +201,8 @@ def cmd_reindex(loader, argv: list[str]) -> int:
 
 
 def _reindex(cfg, a) -> int:
+    """The full-text index first (seconds), then qmd under its own lock: a first embedding pass downloads models and
+    can take hours or hang on the network, and must never keep new pages out of the full-text index meanwhile."""
     from memexos import lock
     try:
         with lock.held(cfg.paths.locks, "reindex"):
@@ -209,11 +210,15 @@ def _reindex(cfg, a) -> int:
             if r["added"] or r["updated"] or r["removed"]:
                 events.emit(cfg.paths.state, "index.update", **r)
             print(i18n.t("event.index.update", **r))
-            want = cfg.get("search.backend") or "auto"
-            if want == "qmd" or (want == "auto" and qmd.command(cfg)):
+    except lock.Busy:
+        print(i18n.t("reindex.busy"))
+    want = cfg.get("search.backend") or "auto"
+    if want == "qmd" or (want == "auto" and qmd.command(cfg)):
+        try:
+            with lock.held(cfg.paths.locks, "qmd"):
                 q = qmd.update(cfg, embed=not a.no_embed)
                 events.emit(cfg.paths.state, "index.qmd", **q)
                 print(f"qmd: {q.get('summary') or ('ok' if q['ok'] else q.get('why'))}")
-    except lock.Busy:
-        print(i18n.t("reindex.busy"))
+        except lock.Busy:
+            print(i18n.t("reindex.qmd_busy"))
     return 0

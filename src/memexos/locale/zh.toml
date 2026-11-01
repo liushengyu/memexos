@@ -169,6 +169,7 @@ not_found = "找不到页面：{page}（用 memex search 找，或看 index.md�
 header = "# {path}（第 {start}–{end} 行，共 {total} 行）"
 
 [reindex]
+qmd_busy = "qmd 还在跑上一次的更新；全文索引已经是最新的。"
 busy = "另一个重建索引的任务在运行，跳过。"
 
 [gate1]

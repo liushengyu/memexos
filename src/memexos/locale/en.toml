@@ -172,6 +172,7 @@ not_found = "No page named {page} (try memex search, or read index.md)"
 header = "# {path} (lines {start}–{end} of {total})"
 
 [reindex]
+qmd_busy = "qmd is still updating from an earlier run; the full-text index is current."
 busy = "Another reindex is running; skipped."
 
 [gate1]

@@ -10,3 +10,4 @@ build/
 # Local scratch; never commit personal vaults or configs
 /scratch/
 *.local.toml
+.gstack/

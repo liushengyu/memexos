@@ -36,7 +36,7 @@ uv tool install .          # 或：pipx install .
 memex doctor               # 检查哪些可用、缺什么、怎么补
 ```
 
-可选：[qmd](https://github.com/tobi/qmd)（向量检索）、`yt-dlp` + `ffmpeg` + whisper.cpp（视频）、`pdftotext`
+可选：[qmd](https://github.com/tobi/qmd)（向量检索；第一次建索引会在后台下载模型，下载完成前检索照常用内置的全文索引）、`yt-dlp` + `ffmpeg` + whisper.cpp（视频）、`pdftotext`
 （poppler，读 PDF）。`memex doctor` 会逐项检查。
 
 ## 快速开始
