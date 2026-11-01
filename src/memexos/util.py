@@ -173,3 +173,10 @@ def proxy_env(base: dict | None, proxy: str | None) -> dict:
     else:
         env["NO_PROXY"] = env["no_proxy"] = "*"
     return env
+
+
+def self_cmd() -> list[str]:
+    """How to invoke this installation's `memex` from a child process (an agent's shell may not have it on PATH)."""
+    import sys
+    exe = shutil.which("memex")
+    return [exe] if exe else [sys.executable, "-m", "memexos"]

@@ -65,7 +65,7 @@ class LLMJudge:
 
     def available(self):
         from memexos import backends
-        for n in backends.chain(self.cfg, "worker"):
+        for n in backends.chain(self.cfg, "judge"):
             ok, why = backends.get(self.cfg, n).available()
             if ok:
                 return True, ""
@@ -74,7 +74,7 @@ class LLMJudge:
     def _ask(self, prompt: str, schema: dict, job: str = "judge") -> dict | None:
         from memexos import backends
         with tempfile.TemporaryDirectory(prefix="memex-judge-") as d:
-            r = backends.structured(self.cfg, "worker", prompt, schema, cwd=d, workdir=d, effort="low", timeout=900, job=job)
+            r = backends.structured(self.cfg, "judge", prompt, schema, cwd=d, workdir=d, effort="low", timeout=900, job=job)
         if not r.ok:
             if r.limited or "no backend available" in r.tail:
                 raise JudgeUnavailable(r.tail[:200])

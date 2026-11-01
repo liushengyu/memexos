@@ -30,6 +30,14 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "fix": ("memexos.pipeline.compile", "cmd_fix"),
     "correct": ("memexos.pipeline.compile", "cmd_correct"),
     "pause": ("memexos.cli", "cmd_pause"),
+    "fetch": ("memexos.capture.fetch", "cmd_fetch"),
+    "add-url": ("memexos.capture.add", "cmd_add_url"),
+    "add-video": ("memexos.capture.video", "cmd_add_video"),
+    "add-visual": ("memexos.capture.visual", "cmd_add_visual"),
+    "cookies": ("memexos.capture.cookies", "cmd_cookies"),
+    "sessions": ("memexos.intake.sessions", "cmd_sessions"),
+    "intake": ("memexos.intake.admit", "cmd_intake"),
+    "catalog": ("memexos.catalog.classify", "cmd_catalog"),
     "resume": ("memexos.cli", "cmd_resume"),
 }
 

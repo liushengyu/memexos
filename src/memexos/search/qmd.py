@@ -24,7 +24,8 @@ def command(cfg) -> str | None:
 
 
 def index_name(cfg) -> str:
-    return cfg.get("search.qmd.index") or f"memexos-{cfg.paths.state.name}"
+    from memexos.config import vault_id
+    return cfg.get("search.qmd.index") or f"memexos-{vault_id(cfg.vault)}"
 
 
 def collection(cfg) -> str:

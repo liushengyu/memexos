@@ -121,22 +121,15 @@ def run(cfg, stage: Path, base: str, raws: list[str], threshold: float | None = 
         files = [f for f in dict.fromkeys(raws + cited + linked) if (stage / f).exists()]
         best = ev.best(u["text"], files)
         evid.append(best)
-        items.append([{"page": Path(u["page"]).stem, "claim": u["text"], "source": b} for b in best])
-    flat = [x for group in items for x in group]
+        # one question per sentence, with its closest passages together: supported if any of them supports it
+        items.append({"page": Path(u["page"]).stem, "claim": u["text"], "source": "\n…\n".join(best) or "(no source passage found)"})
     try:
-        scores = j.supported(flat) if flat else []
+        scores = j.supported(items)
     except judge.JudgeUnavailable as e:
         return 2, "", i18n.t("selfcheck.skipped", why=str(e))
-    if flat and sum(s is not None for s in scores) < len(flat) * 0.5:
-        return 2, "", i18n.t("selfcheck.too_few", got=sum(s is not None for s in scores), total=len(flat))
-    flagged, pos = [], 0
-    for u, group, best in zip(units, items, evid):
-        ss = [s for s in scores[pos:pos + len(group)] if s is not None]
-        pos += len(group)
-        p = max(ss) if ss else 0.0
-        if p < threshold:
-            i = scores[pos - len(group):pos].index(max(ss)) if ss else 0
-            flagged.append((p, u, best[i] if best else ""))
+    if sum(s is not None for s in scores) < len(items) * 0.5:
+        return 2, "", i18n.t("selfcheck.too_few", got=sum(s is not None for s in scores), total=len(items))
+    flagged = [(p, u, best[0] if best else "") for p, u, best in zip(scores, units, evid) if p is not None and p < threshold]
     summary = i18n.t("selfcheck.summary", total=len(units), flagged=len(flagged))
     if not flagged:
         return 0, "", summary

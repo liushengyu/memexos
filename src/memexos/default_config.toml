@@ -30,9 +30,13 @@ writer = ["claude-code"]
 # Gate 2, the independent review. Prefer a different model family from the writer.
 reviewer = ["codex", "claude-code"]
 # Smaller structured jobs: classification, inbox triage, admission, usage judging.
+# Each entry is a backend name, optionally with a model for this role: "claude-code:sonnet".
 worker = ["claude-code"]
 # Reading video frames.
 vision = ["codex", "claude-code"]
+# Many small yes/no questions (the self-check, category screening, ranking). "backend:model" picks a
+# cheaper model for this role only.
+judge = ["claude-code:sonnet", "codex"]
 
 [backends.claude-code]
 command = "claude"

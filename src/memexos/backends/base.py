@@ -31,7 +31,8 @@ class Policy:
     write: list[Path] = field(default_factory=list)       # files or directories it may create/edit
     read: list[Path] = field(default_factory=list)        # extra readable directories besides cwd
     commands: list[list[str]] = field(default_factory=list)  # allowed command prefixes, e.g. [["git", "-C"]]
-    web: bool = False                                     # web search / fetch
+    web: bool = False                                     # web search / fetch tools
+    network: bool = False                                 # commands may reach the network (sandboxed backends)
     deny_read: list[str] = field(default_factory=list)    # glob patterns never to read (credentials)
 
 

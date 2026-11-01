@@ -140,8 +140,10 @@ class Codex(Backend):
             d = p if p.is_dir() or not p.suffix else p.parent
             if d != cwd and cwd not in d.parents:
                 extra += ["--add-dir", str(d)]
+        if policy.web or policy.network:
+            extra += ["-c", "sandbox_workspace_write.network_access=true"]
         if policy.web:
-            extra += ["-c", "sandbox_workspace_write.network_access=true", "-c", "tools.web_search=true"]
+            extra += ["-c", "tools.web_search=true"]
         if schema is not None:
             sp = workdir / "schema.json"
             sp.write_text(json.dumps(schema), encoding="utf-8")

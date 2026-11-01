@@ -24,9 +24,16 @@ __all__ = ["Policy", "Result", "agent", "structured", "get", "chain", "status"]
 
 
 def get(cfg, name: str) -> Backend:
-    if name not in REGISTRY:
-        raise KeyError(f"unknown backend {name!r} (known: {', '.join(REGISTRY)})")
-    return REGISTRY[name](cfg, cfg.section(f"backends.{name}"))
+    """A backend by name. "name:model" picks a model for this role only, e.g. "claude-code:sonnet"."""
+    base, _, model = name.partition(":")
+    if base not in REGISTRY:
+        raise KeyError(f"unknown backend {base!r} (known: {', '.join(REGISTRY)})")
+    section = dict(cfg.section(f"backends.{base}"))
+    if model:
+        section["model"] = model
+    b = REGISTRY[base](cfg, section)
+    b.name = name if model else base
+    return b
 
 
 def chain(cfg, role: str) -> list[str]:
@@ -35,7 +42,7 @@ def chain(cfg, role: str) -> list[str]:
 
 
 def _mark_path(cfg, name: str) -> Path:
-    return cfg.paths.state / "quota" / f"{name}.json"
+    return cfg.paths.state / "quota" / f"{name.partition(':')[0]}.json"      # quotas belong to the account, not the model
 
 
 def exhausted(cfg, name: str) -> dict | None:
@@ -43,7 +50,7 @@ def exhausted(cfg, name: str) -> dict | None:
         m = json.loads(_mark_path(cfg, name).read_text())
     except (OSError, ValueError):
         return None
-    minutes = float(cfg.get(f"backends.{name}.retry_after_minutes") or 60)
+    minutes = float(cfg.get(f"backends.{name.partition(':')[0]}.retry_after_minutes") or 60)
     return m if time.time() - m.get("at", 0) < minutes * 60 else None
 
 
