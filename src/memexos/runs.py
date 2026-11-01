@@ -33,7 +33,8 @@ CLOSE = {"publish": "published", "hold": "held", "stage.discard": "discarded"}
 # which ring stage of the console a running step lights up
 STEP_STAGE = {"collect": "intake", "admit": "intake", "capture": "intake", "visual": "intake", "classify": "classify",
               "write": "compile", "rework": "compile", "inbox": "compile", "selfcheck": "selfcheck", "gate2": "gate2",
-              "triage": "feedback", "research": "intake", "investigate": "intake", "usage": "feedback", "verify": "feedback"}
+              "triage": "feedback", "research": "intake", "investigate": "intake", "usage": "feedback", "verify": "feedback",
+              "index": "publish", "embed": "publish"}
 
 
 def lane(job: str) -> str:

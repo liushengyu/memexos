@@ -67,6 +67,32 @@ model = ""          # empty = claude-opus-5
 proxy = ""
 retry_after_minutes = 60
 
+[backends.openai]
+# Any OpenAI-compatible Chat Completions API: OpenAI, Google Gemini, DeepSeek, Qwen, Kimi, OpenRouter, or a local
+# server (Ollama, LM Studio, vLLM). No extra package needed. Add more endpoints as their own sections with
+# type = "openai" (examples below) and name them in [models].
+base_url = "https://api.openai.com/v1"
+model = ""                     # required, e.g. the provider's model id
+api_key_env = "OPENAI_API_KEY" # "" for servers without keys; keys come from the environment or `memex secret set`
+proxy = ""
+json_mode = "schema"           # how to ask for JSON: schema (response_format json_schema) | object | prompt
+reasoning_effort = ""          # "" = do not send; "auto" = pass the task's effort; or low / medium / high
+price_in = 0.0                 # USD per million input tokens, for cost reports (0 = unknown)
+price_out = 0.0
+retry_after_minutes = 60
+#
+# A local model with Ollama:
+#   [backends.local]
+#   type = "openai"
+#   base_url = "http://localhost:11434/v1"
+#   model = "qwen3:32b"
+#   api_key_env = ""
+#   proxy = "direct"
+# DeepSeek:     base_url = "https://api.deepseek.com/v1",  api_key_env = "DEEPSEEK_API_KEY"
+# Gemini:       base_url = "https://generativelanguage.googleapis.com/v1beta/openai",  api_key_env = "GEMINI_API_KEY"
+# OpenRouter:   base_url = "https://openrouter.ai/api/v1",  api_key_env = "OPENROUTER_API_KEY"
+# Then, for example:  [models] writer = ["local"]  or  worker = ["local", "claude-code"]
+
 # ---------------------------------------------------------------------------
 # The judge answers small, fixed-format questions fast and cheaply: "is this
 # sentence supported by this passage?", "which of these categories fits?",
@@ -140,8 +166,14 @@ proxy = ""
 likes = true
 
 [plugins.youtube]
+# What you save on YouTube: "Liked videos" (LL), "Watch later" (WL), and any playlist ids or URLs you add. The two
+# private lists need a logged-in browser. The browser setting also lets video capture use your login.
+enabled = false
 browser = ""        # export a login cookie for YouTube; empty = anonymous
 proxy = ""
+playlists = ["LL", "WL"]
+first_run_max = 50  # the first run reads at most this many per list, not your whole history
+max_per_run = 200
 
 # ---------------------------------------------------------------------------
 [fetch]
@@ -217,6 +249,11 @@ investigate_min_score = 0.75
 expire_days = 30
 
 # ---------------------------------------------------------------------------
+[state]
+# The event log (what every job did, step by step, with model costs) is kept as one file per month under
+# <state>/events/. Months older than this are deleted; 0 keeps everything.
+keep_events_months = 12
+
 [evals]
 # Retrieval evaluation (memex eval retrieval; docs/evals.md). Writing, checking and grading questions use this role's
 # models: the reviewer by default, so the writer does not grade its own work.

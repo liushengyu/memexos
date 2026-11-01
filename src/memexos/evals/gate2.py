@@ -98,7 +98,9 @@ def run_case(cfg, name: str, out: Path) -> dict:
     work = out / name
     work.mkdir(parents=True)
     base = build(case, work / "vault")
-    code, rep = gate2.run(cfg, work / "vault", base, case["raw"], work / "review", mode="ingest", job="eval")
+    with events.step(cfg.paths.state, "gate2", mode="calibration", case=name) as info:
+        code, rep = gate2.run(cfg, work / "vault", base, case["raw"], work / "review", mode="ingest", job="eval")
+        info["result"] = {0: "passed", 1: "failed"}.get(code, "incomplete")
     review_path = work / "review" / "review.json"
     review = json.loads(review_path.read_text(encoding="utf-8")) if review_path.exists() else None
     seeds = {s["id"]: caught(review, s["detect"]) for s in case["seeds"]}

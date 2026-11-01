@@ -18,20 +18,36 @@ from memexos.backends.anthropic_api import AnthropicAPI
 from memexos.backends.base import Backend, Policy, Result
 from memexos.backends.claude_code import ClaudeCode
 from memexos.backends.codex import Codex
+from memexos.backends.openai_compat import OpenAICompatible
 
-REGISTRY: dict[str, type[Backend]] = {"claude-code": ClaudeCode, "codex": Codex, "anthropic": AnthropicAPI}
+REGISTRY: dict[str, type[Backend]] = {"claude-code": ClaudeCode, "codex": Codex, "anthropic": AnthropicAPI, "openai": OpenAICompatible}
+
+
+def kind_of(cfg, base: str) -> str | None:
+    """The backend type behind a name: a built-in name, or [backends.<name>] with type = "<built-in name>"."""
+    if base in REGISTRY:
+        return base
+    t = (cfg.get(f"backends.{base}") or {}).get("type") if isinstance(cfg.get(f"backends.{base}"), dict) else None
+    return t if t in REGISTRY else None
+
+
+def names(cfg) -> list[str]:
+    """Every backend the settings know: the built-in ones and any extra named sections with a type."""
+    extra = [k for k, v in (cfg.get("backends") or {}).items() if isinstance(v, dict) and v.get("type") in REGISTRY and k not in REGISTRY]
+    return list(REGISTRY) + extra
 __all__ = ["Policy", "Result", "agent", "structured", "get", "chain", "status"]
 
 
 def get(cfg, name: str) -> Backend:
     """A backend by name. "name:model" picks a model for this role only, e.g. "claude-code:sonnet"."""
     base, _, model = name.partition(":")
-    if base not in REGISTRY:
-        raise KeyError(f"unknown backend {base!r} (known: {', '.join(REGISTRY)})")
+    kind = kind_of(cfg, base)
+    if not kind:
+        raise KeyError(f"unknown backend {base!r} (known: {', '.join(names(cfg))})")
     section = dict(cfg.section(f"backends.{base}"))
     if model:
         section["model"] = model
-    b = REGISTRY[base](cfg, section)
+    b = REGISTRY[kind](cfg, section)
     b.name = name if model else base
     return b
 
@@ -70,7 +86,7 @@ def _clear(cfg, name: str) -> None:
 def status(cfg) -> dict:
     """{backend: {"available": bool, "why": str, "exhausted": mark-or-None}} for doctor and the console."""
     out = {}
-    for name in REGISTRY:
+    for name in names(cfg):
         ok, why = get(cfg, name).available()
         out[name] = {"available": ok, "why": why, "exhausted": exhausted(cfg, name)}
     return out

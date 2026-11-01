@@ -132,7 +132,7 @@ class Paths:
     # -- machine-side (never committed) --
     @property
     def events(self) -> Path:
-        return self.state / "events.jsonl"
+        return self.state / "events"
 
     @property
     def log(self) -> Path:

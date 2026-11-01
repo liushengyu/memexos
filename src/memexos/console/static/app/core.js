@@ -504,7 +504,8 @@ $("#sys").onclick = () => go("tasks");
 // ================= runs (/api/runs): step names and colours, a run's title, status and tooltip
 const STEP_COL = {collect: "--s-intake", admit: "--s-intake", capture: "--s-intake", visual: "--s-intake", research: "--s-intake", investigate: "--s-intake",
   classify: "--s-classify", triage: "--s-classify", write: "--s-write", rework: "--s-rework", selfcheck: "--s-check", usage: "--s-check", verify: "--s-check",
-  gate2: "--s-gate2"};
+  gate2: "--s-gate2", index: "--s-classify", embed: "--s-classify", eval_write: "--s-check", eval_check: "--s-check", eval_judge: "--s-check",
+  eval_search: "--s-check", eval_answer: "--s-write", eval_grade: "--s-gate2"};
 const segName = s => stepName(s.step) + (s.step === "gate2" ? ` · ${T(s.data && s.data.mode === "ingest" ? "run.first_review" : "run.recheck")}` : "") +
   (s.step === "admit" && s.data && s.data.channel ? ` · ${s.data.channel}` : "") + (s.step === "rework" && s.data && s.data.reason ? ` · ${T("run.reason_" + s.data.reason)}` : "");
 const segCol = s => cssv(STEP_COL[s.step] || "--mute");

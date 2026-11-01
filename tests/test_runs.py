@@ -85,3 +85,34 @@ def test_render_picks_pass_and_fail_variants():
     assert "passed" in events.render(ev, job=False) and not events.render(ev, job=False).startswith("ingest")
     ev = {"type": "ingest.start", "job": "ingest", "data": {"files": ["a", "b"], "remaining": 5}}
     assert "2 raw" in events.render(ev)
+
+
+def test_monthly_files_retention_and_legacy(tmp_path, monkeypatch):
+    st = tmp_path / "state"
+    st.mkdir()
+    (st / "events.jsonl").write_text(json.dumps({"ts": "2020-01-01T00:00:00+0000", "run": "old", "job": "x", "type": "legacy", "data": {}}) + "\n")
+    (st / "events").mkdir()
+    (st / "events" / "2001-01.jsonl").write_text("")                       # far beyond retention
+    monkeypatch.setattr(events, "KEEP_MONTHS", 12)
+    events.new_run("t")
+    events.emit(st, "hello", n=1)
+    assert events.month_file(st).exists() and not (st / "events" / "2001-01.jsonl").exists()
+    assert [e["type"] for e in events.read(st)] == ["legacy", "hello"]
+    assert [e["type"] for e in events.read(st, since=time.time() - 60)] == ["hello"]
+
+
+def test_every_emitted_event_type_has_words_in_both_languages():
+    import re
+    from pathlib import Path
+    from memexos import i18n
+    src = Path(events.__file__).parent
+    types = set()
+    for f in src.rglob("*.py"):
+        types |= set(re.findall(r'emit\([^"\n]*"([a-z0-9_.]+)"', f.read_text(encoding="utf-8")))
+    missing = []
+    for t in sorted(types):
+        for lang in ("en", "zh"):
+            keys = [f"event.{t}", f"event.{t}_pass"]
+            if not any(k in i18n._pack(lang) for k in keys):
+                missing.append(f"{lang}:{t}")
+    assert not missing, missing

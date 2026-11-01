@@ -205,7 +205,7 @@ def _reindex(cfg, a) -> int:
     can take hours or hang on the network, and must never keep new pages out of the full-text index meanwhile."""
     from memexos import lock
     try:
-        with lock.held(cfg.paths.locks, "reindex"):
+        with lock.held(cfg.paths.locks, "reindex"), events.step(cfg.paths.state, "index"):
             r = fts.update(cfg.vault, cfg.paths.search_index)
             if r["added"] or r["updated"] or r["removed"]:
                 events.emit(cfg.paths.state, "index.update", **r)
@@ -215,8 +215,9 @@ def _reindex(cfg, a) -> int:
     want = cfg.get("search.backend") or "auto"
     if want == "qmd" or (want == "auto" and qmd.command(cfg)):
         try:
-            with lock.held(cfg.paths.locks, "qmd"):
+            with lock.held(cfg.paths.locks, "qmd"), events.step(cfg.paths.state, "embed") as info:
                 q = qmd.update(cfg, embed=not a.no_embed)
+                info["result"] = "ok" if q.get("ok") else "error"
                 events.emit(cfg.paths.state, "index.qmd", **q)
                 print(f"qmd: {q.get('summary') or ('ok' if q['ok'] else q.get('why'))}")
         except lock.Busy:

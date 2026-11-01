@@ -105,3 +105,30 @@ READ_ONLY_NOTE = {
     "zh": "\n\n---\n（运行环境说明：你只能用文件工具读文件，不能修改任何东西。上文提到的 cat / rg / ls / git 等命令，用文件工具代替；"
           "任务需要的命令输出（如 git diff）已由程序算好附在下面。最后严格按给定的 JSON schema 输出。）\n",
 }
+
+
+def schema_errors(schema: dict, value: Any, path: str = "$") -> list[str]:
+    """A small JSON Schema check (type, required, properties, items, enum, additionalProperties) for backends whose
+    provider does not enforce the schema. Returns readable problems; empty when the value fits."""
+    errs: list[str] = []
+    t = schema.get("type")
+    types = t if isinstance(t, list) else [t] if t else []
+    py = {"object": dict, "array": list, "string": str, "integer": int, "number": (int, float), "boolean": bool, "null": type(None)}
+    if types and not any(isinstance(value, py[x]) and not (x in ("integer", "number") and isinstance(value, bool)) for x in types if x in py):
+        return [f"{path}: expected {'/'.join(types)}, got {type(value).__name__}"]
+    if "enum" in schema and value not in schema["enum"]:
+        errs.append(f"{path}: {value!r} is not one of {schema['enum']}")
+    if isinstance(value, dict):
+        props = schema.get("properties") or {}
+        for k in schema.get("required") or []:
+            if k not in value:
+                errs.append(f"{path}: missing {k}")
+        if schema.get("additionalProperties") is False:
+            errs += [f"{path}: unexpected {k}" for k in value if k not in props]
+        for k, v in value.items():
+            if k in props:
+                errs += schema_errors(props[k], v, f"{path}.{k}")
+    if isinstance(value, list) and isinstance(schema.get("items"), dict):
+        for i, v in enumerate(value[:200]):
+            errs += schema_errors(schema["items"], v, f"{path}[{i}]")
+    return errs[:20]

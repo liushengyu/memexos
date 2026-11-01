@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from memexos import backends, config, scaffold
+from memexos import events, backends, config, scaffold
 from memexos.backends.base import Backend, Result
 from memexos.pipeline import compile as C
 from memexos.pipeline.stage import ledger
@@ -125,7 +125,7 @@ def test_review_unavailable_discards_and_waits(vault):
     assert C.ingest(cfg) == 1
     assert not ledger(vault, "ingested.txt") and not ledger(vault, "held.txt")   # still queued
     assert (cfg.paths.state / "gate2-unavailable.json").exists()
-    assert C.ingest(cfg) == 0 and "ingest.waiting" in (cfg.paths.state / "events.jsonl").read_text()
+    assert C.ingest(cfg) == 0 and any(e["type"] == "ingest.waiting" for e in events.read(cfg.paths.state))
 
 
 def test_pause(vault):

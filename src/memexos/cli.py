@@ -18,6 +18,7 @@ from memexos import config as config_mod
 # `memex search` does not pay for (or fail on) the write-side machinery.
 COMMANDS: dict[str, tuple[str, str]] = {
     "init": ("memexos.cli", "cmd_init"),
+    "setup": ("memexos.setup", "cmd_setup"),
     "config": ("memexos.cli", "cmd_config"),
     "doctor": ("memexos.doctor", "main"),
     "help": ("memexos.agenthelp", "main"),
@@ -140,6 +141,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"memex: {e}", file=sys.stderr)
             raise SystemExit(2)
         i18n.set_language(cfg.language)
+        from memexos import events
+        events.configure(cfg)
         return cfg
 
     target = COMMANDS.get(cmd)

@@ -107,9 +107,11 @@ def say(cfg, key: str, **kw) -> None:
     print(i18n.t(f"eval.{key}", **kw), file=sys.stderr)
 
 
-def model_call(cfg, prompt: str, schema: dict, work: Path, effort: str = "high", timeout: float = 5400) -> dict:
+def model_call(cfg, prompt: str, schema: dict, work: Path, effort: str = "high", timeout: float = 5400, step: str = "eval_write") -> dict:
     role = cfg.get("evals.role") or "reviewer"
-    r = backends.structured(cfg, role, prompt, schema, cwd=cfg.vault, workdir=work, effort=effort, timeout=timeout, job="eval")
+    with events.step(cfg.paths.state, step) as info:
+        r = backends.structured(cfg, role, prompt, schema, cwd=cfg.vault, workdir=work, effort=effort, timeout=timeout, job="eval")
+        info.update(ok=r.ok, model=r.model, cost_usd=r.cost_usd)
     if not r.ok or not isinstance(r.result, dict):
         raise RuntimeError(f"{r.backend}: {r.tail[-300:] or 'no result'} ({work})")
     return r.result
@@ -271,7 +273,8 @@ def verify(cfg, d: Path | None = None, batch: int = 25) -> int:
         work = d / f"verify-{b // batch + 1:02d}-{time.strftime('%H%M%S')}"
         work.mkdir()
         try:
-            res = model_call(cfg, i18n.prompt("eval_verify", items="\n".join(json.dumps(it, ensure_ascii=False) for it in part)), CHECKED, work)
+            res = model_call(cfg, i18n.prompt("eval_verify", items="\n".join(json.dumps(it, ensure_ascii=False) for it in part)), CHECKED, work,
+                             step="eval_check")
         except RuntimeError as e:
             say(cfg, "batch_failed", what="verify", i=b // batch + 1, why=str(e)[:200])
             continue
@@ -304,6 +307,15 @@ def l1(cfg, modes: list[str] | None = None, limit: int | None = None) -> Path:
     items = [it for it in bank(cfg) if it["answerable"] and not it["stale"]][:limit]
     d = new_run(cfg)
     rows = []
+    with events.step(cfg.paths.state, "eval_search", questions=len(items), modes=len(modes)):
+        _l1_rows(cfg, items, modes, rows)
+    atomic_write(d / "l1.json", json.dumps({"modes": modes, "n": len(items), "rows": rows}, ensure_ascii=False, indent=1))
+    report(cfg, d)
+    return d
+
+
+def _l1_rows(cfg, items: list[dict], modes: list[str], rows: list[dict]) -> None:
+    from memexos.search import engine
     for i, it in enumerate(items, 1):
         for m in modes:
             t0 = time.time()
@@ -315,9 +327,6 @@ def l1(cfg, modes: list[str] | None = None, limit: int | None = None) -> Path:
                 rows.append({"id": it["id"], "type": it["type"], "mode": m, "secs": round(time.time() - t0, 2), "error": repr(e)[:200]})
         if i % 20 == 0:
             say(cfg, "l1_progress", i=i, n=len(items))
-    atomic_write(d / "l1.json", json.dumps({"modes": modes, "n": len(items), "rows": rows}, ensure_ascii=False, indent=1))
-    report(cfg, d)
-    return d
 
 
 def score(cfg, rows: list[dict], items: dict[str, dict]) -> list[dict]:
@@ -416,7 +425,7 @@ def pool(cfg, depth: int = 3, batch: int = 25, days: int = 2) -> int:
         work = d / f"pool-{b // batch + 1:03d}"
         work.mkdir()
         try:
-            res = model_call(cfg, i18n.prompt("eval_pool", blocks=blocks), POOLED, work)
+            res = model_call(cfg, i18n.prompt("eval_pool", blocks=blocks), POOLED, work, step="eval_judge")
         except RuntimeError as e:
             say(cfg, "batch_failed", what="pool", i=b // batch + 1, why=str(e)[:200])
             continue
@@ -458,8 +467,10 @@ def answer(cfg, agent: str, it: dict, d: Path) -> dict:
         # the state directory is writable so the agent's `memex search` / `memex get` can record what it looked at
         pol = backends.Policy(write=[work, cfg.paths.state], read=[cfg.vault],
                               commands=[me + ["search"], me + ["get"], me + ["catalog"], me + ["help"]])
-        r = backends.agent(cfg, "@" + agent, prompt, cwd=work, workdir=d / "l2" / rid, policy=pol, effort="medium",
-                           timeout=float(cfg.get("evals.l2_timeout") or 1200), job="eval")
+        with events.step(cfg.paths.state, "eval_answer", agent=agent, question=it["id"]) as info:
+            r = backends.agent(cfg, "@" + agent, prompt, cwd=work, workdir=d / "l2" / rid, policy=pol, effort="medium",
+                               timeout=float(cfg.get("evals.l2_timeout") or 1200), job="eval")
+            info.update(ok=r.ok, model=r.model, cost_usd=r.cost_usd)
     finally:
         if old is None:
             os.environ.pop("MEMEX_RUN", None)
@@ -517,7 +528,7 @@ def grade(cfg, d: Path, batch: int = 12) -> int:
         work = d / f"grade-{time.strftime('%H%M%S')}-{b // batch + 1:02d}"
         work.mkdir()
         try:
-            res = model_call(cfg, i18n.prompt("eval_l2_judge", blocks=blocks), GRADED, work)
+            res = model_call(cfg, i18n.prompt("eval_l2_judge", blocks=blocks), GRADED, work, step="eval_grade")
         except RuntimeError as e:
             failed += 1
             say(cfg, "batch_failed", what="grade", i=b // batch + 1, why=str(e)[:200])

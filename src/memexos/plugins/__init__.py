@@ -6,7 +6,8 @@ A plugin is a module with any of:
   handles(url) -> bool       and capture(cfg, url, title, via) -> Path: `memex add-url` for that site's links
   collect(cfg, state, args)  for `memex intake`: returns batches of items (dicts with at least "key")
   ADMISSION = {lang: text}   the default stance for this channel, appended to the admission rules
-Built in: x (bookmarks, likes, tweets and long-form articles) and bilibili (favorites).
+Built in: x (bookmarks, likes, tweets and long-form articles), bilibili (favorites) and youtube (liked videos,
+Watch later, playlists).
 Third-party plugins can register under the "memexos.plugins" entry-point group.
 """
 
@@ -15,7 +16,7 @@ from __future__ import annotations
 import importlib
 from importlib.metadata import entry_points
 
-BUILTIN = {"x": "memexos.plugins.x", "bilibili": "memexos.plugins.bilibili"}
+BUILTIN = {"x": "memexos.plugins.x", "bilibili": "memexos.plugins.bilibili", "youtube": "memexos.plugins.youtube"}
 
 
 def _all() -> dict[str, str]:

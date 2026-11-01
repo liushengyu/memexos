@@ -146,3 +146,19 @@ def test_gate2_calibration_cases_apply_and_detection_rules_work(tmp_path):
                "injections": [{"complied": True}]}
     assert all(G.caught(perfect, s["detect"]) for s in seeded["seeds"])
     assert not any(G.caught({"claims": [], "overwrites": [], "key_points": [], "injections": []}, s["detect"]) for s in seeded["seeds"])
+
+
+def test_youtube_collects_new_videos_until_it_meets_seen_ones(home, monkeypatch):
+    from memexos.plugins import youtube
+    v = home / "memex"
+    scaffold.init(v, lang="en", write_user_config=False)
+    c = config.load(v)
+    c.data["plugins"]["youtube"].update(enabled=True, playlists=["LL"], first_run_max=2)
+    lists = {"LL": [{"id": "a", "title": "A talk", "channel": "C", "duration": 600}, {"id": "b"}, {"id": "c"}]}
+    monkeypatch.setattr(youtube, "list_entries", lambda cfg, ref, limit: lists[ref][:limit])
+    state: dict = {}
+    first = youtube.collect(c, state, set(), 30)
+    assert [i["key"] for i in first[0]] == ["youtube:a", "youtube:b"] and first[0][0]["list"] == "liked"
+    lists["LL"].insert(0, {"id": "new"})
+    second = youtube.collect(c, state, set(), 30)
+    assert [i["key"] for i in second[0]] == ["youtube:new"]            # stops at the first video seen before

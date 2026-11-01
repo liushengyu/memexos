@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from memexos import backends, config, judge
+from memexos import events, backends, config, judge
 from memexos.backends.base import Backend, Policy, Result
 from memexos.backends.tools import Sandbox
 
@@ -48,7 +48,7 @@ def test_quota_switches_backend_and_remembers(fake, tmp_path):
     assert r.ok and r.backend == "b" and Fake.calls == ["a", "b"]
     r = call(fake, tmp_path)                       # a is skipped while its quota mark is fresh
     assert r.backend == "b" and Fake.calls == ["a", "b", "b"]
-    ev = [json.loads(l) for l in (fake.paths.state / "events.jsonl").read_text().splitlines()]
+    ev = list(events.read(fake.paths.state))
     assert [e["data"]["backend"] for e in ev if e["type"] == "model.call"] == ["a", "b", "b"]
 
 

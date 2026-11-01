@@ -1,13 +1,19 @@
 """Structured event log: the single source of truth for "what is the system doing".
 
-Every job appends JSON lines to <state>/events.jsonl:
+Every MemexOS command that does work writes its own events here, through emit() and the run() / step() / job()
+context managers below; nothing else writes them and nothing parses human-readable logs. One JSON line per event, in
+one file per month, <state>/events/<YYYY-MM>.jsonl:
 
-    {"ts": "...", "run": "ingest-20261101-031700-4f2a", "job": "ingest",
+    {"ts": "2026-11-01T03:17:05+0800", "run": "ingest-20261101-031700-4f2a", "job": "ingest",
      "type": "gate2.result", "data": {"passed": false, "problems": 3}}
 
-The status view and the console read these events. A human-readable line is
-also written to <state>/memex.log, rendered from the language pack
-(event.<type>), but nothing parses that file: wording can change freely.
+- run.start / run.end      a command, with its pid (a run whose process died shows as interrupted) and its outcome
+- step.start / step.end    one stage of the work (write, gate2, admit, …) with its duration and result
+- everything else          what happened: gate results, publish, hold, captures, model calls with tokens and cost, …
+
+`memex status`, the console and the evaluations read these events (memexos.runs rebuilds timelines from them).
+Months older than state.keep_events_months are deleted. A human-readable line per event also goes to
+<state>/memex.log (rendered from the language pack, rotated by size) for people who like `tail -f`.
 """
 
 from __future__ import annotations
@@ -23,6 +29,54 @@ from typing import Any, Iterator
 from memexos import i18n
 
 _run: dict[str, str] = {}
+KEEP_MONTHS = 12                 # set from state.keep_events_months by the command line
+LOG_MAX_BYTES = 10 << 20
+LOG_KEEP = 3
+
+
+def configure(cfg) -> None:
+    global KEEP_MONTHS
+    KEEP_MONTHS = int(cfg.get("state.keep_events_months") or 12)
+
+
+def month_file(state_dir: Path, t: float | None = None) -> Path:
+    return state_dir / "events" / (time.strftime("%Y-%m", time.localtime(t)) + ".jsonl")
+
+
+def files(state_dir: Path) -> list[Path]:
+    """Event files oldest first; a legacy single events.jsonl counts as the oldest."""
+    d = state_dir / "events"
+    out = sorted(d.glob("????-??.jsonl")) if d.is_dir() else []
+    legacy = state_dir / "events.jsonl"
+    return ([legacy] if legacy.exists() else []) + out
+
+
+def _prune(state_dir: Path) -> None:
+    if KEEP_MONTHS <= 0:
+        return
+    now = time.localtime()
+    y, m = now.tm_year, now.tm_mon - KEEP_MONTHS
+    while m <= 0:
+        y, m = y - 1, m + 12
+    oldest = f"{y:04d}-{m:02d}"
+    for f in files(state_dir):
+        if f.parent.name == "events" and f.stem < oldest:
+            f.unlink(missing_ok=True)
+
+
+def _log_line(state_dir: Path, line: str) -> None:
+    p = state_dir / "memex.log"
+    try:
+        if p.stat().st_size > LOG_MAX_BYTES:
+            for i in range(LOG_KEEP - 1, 0, -1):
+                older = state_dir / f"memex.log.{i}"
+                if older.exists():
+                    older.replace(state_dir / f"memex.log.{i + 1}")
+            p.replace(state_dir / "memex.log.1")
+    except OSError:
+        pass
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {line}\n")
 
 
 def new_run(job: str) -> str:
@@ -91,12 +145,14 @@ def emit(state_dir: Path, type: str, job: str | None = None, **data: Any) -> dic
           "type": type, "data": data}
     if _run.get("parent"):
         ev["parent"] = _run["parent"]
-    state_dir.mkdir(parents=True, exist_ok=True)
-    with open(state_dir / "events.jsonl", "a", encoding="utf-8") as f:
+    target = month_file(state_dir)
+    new_month = not target.exists()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with open(target, "a", encoding="utf-8") as f:
         f.write(json.dumps(ev, ensure_ascii=False, default=str) + "\n")
-    line = render(ev)
-    with open(state_dir / "memex.log", "a", encoding="utf-8") as f:
-        f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {line}\n")
+    if new_month:
+        _prune(state_dir)
+    _log_line(state_dir, render(ev))
     return ev
 
 
@@ -130,24 +186,25 @@ def render(ev: dict, lang: str | None = None, job: bool = True) -> str:
 
 
 def read(state_dir: Path, since: float | None = None, types: tuple[str, ...] = (), run: str | None = None) -> Iterator[dict]:
-    p = state_dir / "events.jsonl"
-    if not p.exists():
-        return
-    with open(p, "rb") as f:
-        if since is not None:
-            f.seek(_offset_since(f, since))
-        for line in f:
-            try:
-                ev = json.loads(line)
-            except ValueError:
-                continue
-            if types and not ev.get("type", "").startswith(types):
-                continue
-            if run and ev.get("run") != run:
-                continue
-            if since is not None and _epoch(ev.get("ts", "")) < since:
-                continue
-            yield ev
+    first = time.strftime("%Y-%m", time.localtime(since)) if since is not None else ""
+    for p in files(state_dir):
+        if p.parent.name == "events" and p.stem < first:
+            continue                              # a whole month before `since`
+        with open(p, "rb") as f:
+            if since is not None:
+                f.seek(_offset_since(f, since))
+            for line in f:
+                try:
+                    ev = json.loads(line)
+                except ValueError:
+                    continue
+                if types and not ev.get("type", "").startswith(types):
+                    continue
+                if run and ev.get("run") != run:
+                    continue
+                if since is not None and _epoch(ev.get("ts", "")) < since:
+                    continue
+                yield ev
 
 
 def _offset_since(f, since: float) -> int:

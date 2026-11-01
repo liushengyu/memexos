@@ -154,10 +154,15 @@ def launchd_remove(cfg) -> list[str]:
 
 
 # ---------------------------------------------------------------- systemd (user units)
+def sd_quote(s: str) -> str:
+    """systemd unit quoting: double quotes with backslash escapes, and % doubled (it starts a specifier)."""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
+
+
 def systemd_units(cfg, job: str, spec: dict) -> dict[str, str]:
     name = label(cfg, job)
-    argv = " ".join(shlex.quote(a) for a in memex_argv() + spec["args"])
-    env = "\n".join(f"Environment={shlex.quote(f'{k}={v}')}" for k, v in job_env(cfg).items())
+    argv = " ".join(sd_quote(a) for a in memex_argv() + spec["args"])
+    env = "\n".join(f"Environment={sd_quote(f'{k}={v}')}" for k, v in job_env(cfg).items())
     units = {}
     if spec.get("keep_alive"):
         units[f"{name}.service"] = f"[Unit]\nDescription=MemexOS {job}\n\n[Service]\nExecStart={argv}\n{env}\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n"
@@ -176,7 +181,7 @@ def systemd_units(cfg, job: str, spec: dict) -> dict[str, str]:
         timer += "OnStartupSec=2min\n"
     units[f"{name}.timer"] = f"[Unit]\nDescription=MemexOS {job} schedule\n\n[Timer]\n{timer}\n[Install]\nWantedBy=timers.target\n"
     if spec.get("watch"):
-        units[f"{name}.path"] = f"[Unit]\nDescription=MemexOS {job} on raw changes\n\n[Path]\nPathChanged={spec['watch']}\nUnit={name}.service\n\n[Install]\nWantedBy=default.target\n"
+        units[f"{name}.path"] = f"[Unit]\nDescription=MemexOS {job} on raw changes\n\n[Path]\nPathChanged={spec['watch'].replace('%', '%%')}\nUnit={name}.service\n\n[Install]\nWantedBy=default.target\n"
     return units
 
 
@@ -215,7 +220,8 @@ def cron_lines(cfg, jobs) -> list[str]:
     for job, spec in jobs.items():
         cmd = f"{env} {argv(spec['args'])} >> {shlex.quote(str(cfg.paths.state / 'jobs' / (job + '.out')))} 2>&1"
         if spec.get("every"):
-            out.append(f"*/{spec['every']} * * * * {cmd} {tag}")
+            e = int(spec["every"])
+            out.append(f"*/{e} * * * * {cmd} {tag}" if e < 60 else f"0 */{max(1, e // 60)} * * * {cmd} {tag}")
         if spec.get("at"):
             out.append(f"{spec['at'][1]} {spec['at'][0]} * * * {cmd} {tag}")
         if spec.get("weekly"):
