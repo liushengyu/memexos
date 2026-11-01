@@ -4,6 +4,8 @@ unknown = "Unknown command: {cmd} (memex help admin lists them)"
 not_yet = "`memex {cmd}` is not available in this build yet."
 
 [init]
+sample = "Added the sample content ({n} files): three sources about remembering what you read, their wiki pages and evaluation questions."
+sample_skipped = "The folder is not empty, so the sample content was not added."
 exists = "{path} already contains files; adding only what is missing."
 created = "Created knowledge base at {path}"
 config_written = "Wrote your settings to {path}"
@@ -40,6 +42,8 @@ role_none = "{role}: none of [{chain}] is available"
 judge = "judge: {backend}"
 search_fts = "built-in full-text index ({docs} documents)"
 search_qmd = "qmd (vector search + local reranker)"
+search_rerank = "qmd reranker model downloaded (used by search.rerank = auto)"
+search_rerank_hint = "run any `qmd query` once to download it, or set search.rerank = \"qmd\" to download on first search"
 tool = "{name}"
 asr_model = "transcription model {path}"
 scheduler = "scheduler: {backend}"
@@ -50,10 +54,12 @@ summary_missing = "{n} required item(s) missing; see above."
 [help]
 admin = """Maintenance commands (normally run by the scheduler; you can run them by hand)
 
-  memex init [path]            create a knowledge base and your settings
+  memex init [path] [--sample] create a knowledge base and your settings (--sample: start with example content)
   memex doctor                 check tools, models and settings
   memex config show|path       show the effective settings / where they live
   memex status [-w]            what is running, what finished today, what needs attention
+  memex nightly                the nightly chain: collect, then the [schedule] nightly steps, then compile
+  memex pause | resume         stop / restart compiling (a running batch finishes)
   memex ingest                 compile new raw files into the wiki (gates 1 and 2, then publish)
   memex lint                   weekly health check
   memex fix                    repair problems found by review
@@ -560,6 +566,14 @@ inbox_line = "{decide} waiting for your decision · {waiting} decided, not yet c
 log = "log: {path}"
 
 [eval]
+g2_start = "Gate 2 calibration: {n} case(s), one review each with the reviewer models"
+g2_case = "{case}: {desc}"
+g2_incomplete = "the review did not finish: {why}"
+g2_result = "review result: {result} (expected: {expected})"
+g2_pass = "passed"
+g2_fail = "not passed"
+g2_false_alarms = "{n} problem(s) reported on a clean compile (false alarms unless you agree with them):"
+g2_cost = "{model}, {secs}s, {cost} · full review: {path}"
 usage = "usage: memex eval <suite> …  (suites: {suites})"
 mined = "{n} questions from {sessions} sessions"
 generated = "{n} candidate questions written ({run})"

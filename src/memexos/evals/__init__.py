@@ -1,4 +1,4 @@
-"""Evaluations: `memex eval retrieval …` (the read side). Gate 2 itself is the write side's check."""
+"""Evaluations: `memex eval retrieval …` (the read side) and `memex eval gate2` (calibrating the write side's review)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import sys
 
 from memexos import i18n
 
-SUITES = {"retrieval": "memexos.evals.retrieval"}
+SUITES = {"retrieval": "memexos.evals.retrieval", "gate2": "memexos.evals.gate2"}
 
 
 def cmd_eval(loader, argv: list[str]) -> int:

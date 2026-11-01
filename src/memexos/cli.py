@@ -56,11 +56,17 @@ def cmd_init(cfg_loader, argv: list[str]) -> int:
     ap.add_argument("path", nargs="?", help="where to create it (default: vault.path from your settings, ~/memex)")
     ap.add_argument("--lang", choices=i18n.available(), help="language of prompts, logs and the console")
     ap.add_argument("--no-user-config", action="store_true", help="do not write ~/.config/memexos/config.toml")
+    ap.add_argument("--sample", action="store_true", help="start with the sample content (three sources, compiled, with evaluation questions)")
     a = ap.parse_args(argv)
     cfg = cfg_loader(a.path)
     lang = a.lang or cfg.language
-    for line in scaffold.init(cfg.vault, lang=lang, write_user_config=not a.no_user_config):
+    for line in scaffold.init(cfg.vault, lang=lang, write_user_config=not a.no_user_config, sample=a.sample):
         print(line)
+    from memexos.search import fts           # searchable right away, before the first scheduled reindex
+    try:
+        fts.update(cfg.vault, cfg.paths.search_index)
+    except Exception as e:  # noqa: BLE001 — the index is rebuilt on the next reindex anyway
+        print(f"search index: {e}", file=sys.stderr)
     return 0
 
 

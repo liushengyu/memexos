@@ -64,6 +64,8 @@ def checks(cfg) -> list[dict]:
     add(search, i18n.t("doctor.search_fts", docs=n if n is not None else 0), n is not None, False, "memex reindex")
     add(search, i18n.t("doctor.search_qmd"), qmd.ready(cfg), False, HINTS["qmd"])
     add(search, "node", which("node"), False, HINTS["node"])
+    if qmd.package_dir():
+        add(search, i18n.t("doctor.search_rerank"), qmd.reranker_model(), False, i18n.t("doctor.search_rerank_hint"))
 
     cap = i18n.t("doctor.section_capture")
     for tool in ("yt-dlp", "ffmpeg", "pdftotext"):

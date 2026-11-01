@@ -4,6 +4,8 @@ unknown = "未知命令：{cmd}（memex help admin 列出全部命令）"
 not_yet = "这个版本还没有 `memex {cmd}`。"
 
 [init]
+sample = "已加入示例内容（{n} 个文件）：三份关于“记住读过的东西”的资料、编译好的 wiki 页面和测评题。示例内容是英文的。"
+sample_skipped = "目录不是空的，没有加入示例内容。"
 exists = "{path} 里已经有文件，只补齐缺的部分。"
 created = "已在 {path} 建好知识库"
 config_written = "你的设置写在 {path}"
@@ -40,6 +42,8 @@ role_none = "{role}：[{chain}] 里没有一个可用"
 judge = "判断模型：{backend}"
 search_fts = "内置全文索引（{docs} 份文档）"
 search_qmd = "qmd（向量检索 + 本地重排模型）"
+search_rerank = "qmd 的重排模型已下载（search.rerank = auto 时使用）"
+search_rerank_hint = "随便运行一次 `qmd query` 下载它，或设 search.rerank = \"qmd\"，在第一次检索时下载"
 tool = "{name}"
 asr_model = "转写模型 {path}"
 scheduler = "定时任务：{backend}"
@@ -50,10 +54,12 @@ summary_missing = "缺 {n} 项必需的，见上面。"
 [help]
 admin = """维护命令（一般由定时任务调用，也可以手动运行）
 
-  memex init [路径]            建知识库和你的设置
+  memex init [路径] [--sample] 建知识库和你的设置（--sample：带示例内容）
   memex doctor                 检查工具、模型和设置
   memex config show|path       看生效的设置 / 设置文件在哪
   memex status [-w]            在做什么、今天做完了什么、有什么要注意
+  memex nightly                夜间任务链：采集，再跑 [schedule] nightly 里的各步，最后编译
+  memex pause | resume         暂停 / 恢复编译（正在跑的这一批会跑完）
   memex ingest                 把新的 raw 编译进 wiki（过门 1、门 2 才发布）
   memex lint                   每周体检
   memex fix                    修复审校发现的问题
@@ -559,6 +565,14 @@ inbox_line = "等你决定 {decide} 件 · 已决定等执行 {waiting} 件 · A
 log = "日志：{path}"
 
 [eval]
+g2_start = "门 2 校准：{n} 个用例，每个用审校模型跑一次审校"
+g2_case = "{case}：{desc}"
+g2_incomplete = "审校没跑完：{why}"
+g2_result = "审校结果：{result}（预期：{expected}）"
+g2_pass = "通过"
+g2_fail = "不通过"
+g2_false_alarms = "干净的编译报了 {n} 个问题（除非你同意，否则算误报）："
+g2_cost = "{model}，{secs} 秒，{cost} · 完整审校：{path}"
 usage = "用法：memex eval <测评> …（可选：{suites}）"
 mined = "从 {sessions} 个会话里抽出 {n} 条提问"
 generated = "写出 {n} 道候选题（{run}）"

@@ -112,6 +112,17 @@ def query(cfg, mode: str, q: str, n: int, degraded: list) -> list[dict] | None:
     return out
 
 
+def models_dir() -> Path:
+    return Path(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")) / "qmd" / "models"
+
+
+def reranker_model() -> Path | None:
+    """qmd's local reranker model, when it has already been downloaded (qmd fetches it on first use, which takes a while)."""
+    d = models_dir()
+    hits = sorted(d.glob("*rerank*.gguf")) if d.is_dir() else []
+    return hits[0] if hits else None
+
+
 def package_dir() -> Path | None:
     """Where qmd's JavaScript package is installed (to reuse its local reranker model)."""
     exe = which("qmd")

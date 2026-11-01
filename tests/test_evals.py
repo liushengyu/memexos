@@ -106,3 +106,43 @@ def test_l2_answers_and_grades(cfg):
     data = json.loads((d / "l2.json").read_text())
     assert len(data["results"]) == 3 and len(data["verdicts"]) == 3
     assert "| fake | 3/3 |" in (d / "l2-report.md").read_text()
+
+
+def test_sample_vault_passes_gate1_and_its_questions_are_found(home, monkeypatch):
+    from memexos.pipeline import gate1
+    v = home / "memex"
+    scaffold.init(v, lang="en", write_user_config=False)
+    scaffold.copy_sample(v)
+    # sources and ledgers arrive before the compile; the compile itself may only touch wiki/, index.md and log.md
+    subprocess.run(["git", "-C", str(v), "add", "raw", ".memex"], check=True)
+    subprocess.run(["git", "-C", str(v), "commit", "-qm", "sources"], check=True)
+    base = subprocess.run(["git", "-C", str(v), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    subprocess.run(["git", "-C", str(v), "add", "-A"], check=True)
+    rep = gate1.check(v, base, "ingest")
+    assert rep["passed"], rep["errors"]
+    monkeypatch.setenv("MEMEX_VAULT", str(v))
+    monkeypatch.setenv("MEMEX_SEARCH__BACKEND", "fts")
+    c = config.load(v)
+    c.data["search"]["rerank"] = "none"
+    fts.update(v, c.paths.search_index)
+    assert len(R.bank(c)) == 14 and not any(q["stale"] for q in R.bank(c))
+    d = R.l1(c, ["keyword", "fast"])
+    rows = json.loads((d / "summary.json").read_text())["rows"]
+    assert all(r[3] >= 0.8 for r in rows), rows                # the right page within the top 10 for most questions
+
+
+def test_gate2_calibration_cases_apply_and_detection_rules_work(tmp_path):
+    from memexos.evals import gate2 as G
+    for name, case in G.cases().items():
+        root = tmp_path / name
+        base = G.build(case, root)
+        diff = subprocess.run(["git", "-C", str(root), "status", "--porcelain"], capture_output=True, text=True).stdout
+        assert all(p.split("/")[-1] in diff for p in case["pages"])            # the compile's pages are the change under review
+        assert len(base) == 40
+    seeded = G.cases()["seeded"]
+    perfect = {"claims": [{"verdict": "CONTRADICTED", "claim": "starts at 3.5"}, {"verdict": "UNSUPPORTED", "claim": "1,000 students"}],
+               "overwrites": [{"new_text": "about 9,000 index cards", "substantive": True, "backed_by_source": False, "disclosed": False}],
+               "key_points": [{"importance": "must", "covered": False, "point": "A wrong answer sends the card back to the first box"}],
+               "injections": [{"complied": True}]}
+    assert all(G.caught(perfect, s["detect"]) for s in seeded["seeds"])
+    assert not any(G.caught({"claims": [], "overwrites": [], "key_points": [], "injections": []}, s["detect"]) for s in seeded["seeds"])

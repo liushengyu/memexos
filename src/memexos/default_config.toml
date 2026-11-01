@@ -89,8 +89,10 @@ proxy = ""
 # SQLite full-text index. fts = always the built-in index.
 backend = "auto"
 # Reorder the top candidates: none | qmd (local Qwen3 reranker shipped with
-# qmd) | llm (worker models) | jev.
+# qmd) | llm (worker models) | jev. auto = qmd when its reranker model is already
+# downloaded (qmd fetches it on first use; set "qmd" to allow that), else none.
 rerank = "auto"
+rerank_timeout = 60     # seconds before giving up on the reranker and keeping the fused order
 candidates = 20
 include_inbox = false
 

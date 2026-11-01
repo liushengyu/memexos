@@ -53,8 +53,26 @@ def git(vault: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(vault), *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
 
 
+def sample_dir() -> Path:
+    return Path(__file__).parent / "examples" / "sample-vault"
+
+
+def copy_sample(vault: Path) -> int:
+    """The sample vault: three original sources, their compiled pages, the catalog and a question bank (English)."""
+    src, n = sample_dir(), 0
+    for f in sorted(src.rglob("*")):
+        if f.is_file():
+            dst = vault / f.relative_to(src)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write(dst, f.read_text(encoding="utf-8"))
+            n += 1
+    for d in ("wiki/sources", "wiki/concepts", "wiki/entities", "wiki/topics"):
+        (vault / d / ".gitkeep").unlink(missing_ok=True)
+    return n
+
+
 def init(path: str | os.PathLike, lang: str = "en", write_user_config: bool = True,
-         user_config: str | os.PathLike | None = None) -> list[str]:
+         user_config: str | os.PathLike | None = None, sample: bool = False) -> list[str]:
     """Create the vault at `path`. Returns the human-readable report lines."""
     i18n.set_language(lang)
     vault = Path(path).expanduser().resolve()
@@ -76,17 +94,23 @@ def init(path: str | os.PathLike, lang: str = "en", write_user_config: bool = Tr
         except OSError:
             atomic_write(claude, "See [AGENTS.md](AGENTS.md).\n")
 
+    if sample:
+        if existed:
+            out.append(i18n.t("init.sample_skipped"))
+        else:
+            out.append(i18n.t("init.sample", n=copy_sample(vault)))
     if not (vault / ".git").exists():
         git(vault, "init", "-q", "-b", "main")
         out.append(i18n.t("init.git_init"))
     git(vault, "add", "-A")
     if git(vault, "diff", "--cached", "--quiet").returncode != 0:
-        r = git(vault, "commit", "-q", "-m", "init: MemexOS knowledge base")
+        msg = "init: MemexOS knowledge base" + (" with the sample content" if sample and not existed else "")
+        r = git(vault, "commit", "-q", "-m", msg)
         if r.returncode != 0 and ("user.email" in r.stderr or "identity" in r.stderr.lower()):
             # No git identity on this machine: give this repository its own, local one.
             git(vault, "config", "user.name", "MemexOS")
             git(vault, "config", "user.email", "memexos@localhost")
-            git(vault, "commit", "-q", "-m", "init: MemexOS knowledge base")
+            git(vault, "commit", "-q", "-m", msg)
     out.append(i18n.t("init.created", path=vault))
 
     if write_user_config:
