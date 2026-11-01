@@ -91,6 +91,7 @@ def new_run(job: str) -> str:
 @contextlib.contextmanager
 def run(state_dir: Path, job: str) -> Iterator[str]:
     """A whole command: run.start (with the pid, so readers can tell a live run from a crashed one) … run.end."""
+    saved, saved_env = dict(_run), os.environ.get("MEMEX_RUN")
     rid = new_run(job)
     t0 = time.time()
     emit(state_dir, "run.start", pid=os.getpid())
@@ -106,6 +107,13 @@ def run(state_dir: Path, job: str) -> Iterator[str]:
         raise
     finally:
         emit(state_dir, "run.end", seconds=round(time.time() - t0), status=status)
+        # back to the enclosing run (or none), so a later run in the same process is not recorded as this one's child
+        _run.clear()
+        _run.update(saved)
+        if saved_env is None:
+            os.environ.pop("MEMEX_RUN", None)
+        else:
+            os.environ["MEMEX_RUN"] = saved_env
 
 
 @contextlib.contextmanager

@@ -116,3 +116,35 @@ def test_every_emitted_event_type_has_words_in_both_languages():
             if not any(k in i18n._pack(lang) for k in keys):
                 missing.append(f"{lang}:{t}")
     assert not missing, missing
+
+
+def test_messages_may_use_key_and_name_placeholders():
+    from memexos import i18n
+    assert "“Life/Tools”" in i18n.t("catalog.exists", key="Life/Tools")
+    assert i18n.t("inbox.cand_title", key="x:1")
+
+
+def test_unit_ids_do_not_depend_on_the_window(home, monkeypatch):
+    import time
+    import types
+    from memexos import config, events, runs
+    cfg = config.load(home / "v")
+    st = cfg.paths.state
+    old = time.time() - 3 * 86400                       # one run three days ago, outside the narrow window
+    fake = types.SimpleNamespace(**{k: getattr(time, k) for k in ("localtime", "mktime", "strptime", "gmtime")})
+    fake.time = lambda: old
+    fake.strftime = lambda fmt, tup=None: time.strftime(fmt, tup or time.localtime(old))
+    monkeypatch.setattr(events, "time", fake)
+    with events.run(st, "ingest"):
+        events.emit(st, "ingest.start", files=["raw/old.md"], remaining=1)
+        events.emit(st, "publish", branch="staging/old", message="m")
+    monkeypatch.setattr(events, "time", time)
+    for _ in range(3):
+        with events.run(st, "ingest"):
+            events.emit(st, "ingest.start", files=["raw/a.md"], remaining=1)
+            with events.step(st, "write"):
+                pass
+            events.emit(st, "publish", branch="staging/x", message="m")
+    wide = runs.timeline(st, time.time() - 30 * 86400)
+    narrow = runs.timeline(st, time.time() - 3600)
+    assert {u["id"] for u in narrow} <= {u["id"] for u in wide} and len(narrow) == 3

@@ -43,7 +43,7 @@ class ClaudeCode(Backend):
         return which(self.section.get("command") or "claude")
 
     def available(self) -> tuple[bool, str]:
-        return (True, "") if self.exe() else (False, f"command `{self.section.get('command') or 'claude'}` not found")
+        return (True, "") if self.exe() else (False, i18n.t("backend.cmd_missing", cmd=self.section.get("command") or "claude"))
 
     def _base(self, effort: str) -> list[str]:
         cmd = [self.exe() or "claude", "-p"]

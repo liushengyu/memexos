@@ -68,7 +68,7 @@ function renderStages() {
 }
 function renderToday(L) {
   $("#tk-today").innerHTML = (L.done || []).map(x => `<span>${esc(x)}</span>`).join("") +
-    (L.schedule ? `<span><b>${esc(T("tk.schedule"))}</b> ${esc(T("tk.schedule_line", {i: L.schedule.intake_at || "—", l: L.schedule.lint_at || "—"}))}</span>` : "");
+    (L.schedule ? `<span><b>${esc(T("tk.schedule"))}</b> ${esc(T("tk.schedule_line", {i: L.schedule.intake_at || "—", l: weekly(L.schedule.lint_at)}))}</span>` : "");
 }
 function runRow(r, i, fresh) {
   const st = runStatus(r), end = r.t1 || TK.now, span = (end - r.t0) || 1;
@@ -98,6 +98,8 @@ function renderTkList(anim, fresh) {
   const c = $("#tk-clear"); if (c) c.onclick = () => { TK.stage = null; renderStages(); renderTkList(true); };
   const sel = TK.sel && $(`#tk-list .rrow[data-id="${CSS.escape(TK.sel)}"]`); TK.hl.select(sel || null);
 }
+// "sun 21:07" (the config's form) in the reader's language
+function weekly(v) { const m = /^([a-z]{3})\s+(\S+)$/i.exec(v || ""); if (!m) return v || "—"; const d = T("tk.wd_" + m[1].toLowerCase()); return (d === "tk.wd_" + m[1].toLowerCase() ? m[1] : d) + " " + m[2]; }
 function selectRun(id) { TK.sel = id; const r = $(`#tk-list .rrow[data-id="${CSS.escape(id)}"]`); TK.hl.select(r); if (r) r.scrollIntoView({block: "nearest", behavior: "smooth"}); loadDetail(id); }
 async function loadDetail(id, quiet) {
   const D = $("#tk-detail");
@@ -123,10 +125,13 @@ function renderDetailRun(d, quiet) {
     if (!s.t1) bits.push(T("run.ongoing"));
     const marks = r.marks.filter(m => m.type !== "publish" && m.t >= s.t0 - 1 && m.t <= (s.t1 || now) + 1)
       .map(m => `<div class="wf-mk ${m.ok ? "ok" : m.ok === false ? "warn" : ""}" style="left:${X(m.t)};--i:${i}" data-tip="${hm(m.t)} · ${esc(m.text)}">${m.type === "gate1.result" ? "1" : m.ok ? "✓" : "!"}</div>`).join("");
-    const left = parseFloat(X(s.t0)), right = left + w > 72;
-    return `<div class="wf-row"><div class="lab"><i style="background:${segCol(s)}"></i>${esc(segName(s))}</div><div class="wf-track">
+    // the text goes after the bar; for a long bar before it, or inside it when there is no room on either side
+    const left = parseFloat(X(s.t0)), after = left + w <= 72, before = !after && left >= 28;
+    // the row label is short (the colour already says "independent review"); the tooltip has the full name
+    const lab = s.step === "gate2" ? T(s.data && s.data.mode === "ingest" ? "run.first_review" : "run.recheck") : segName(s);
+    return `<div class="wf-row"><div class="lab"><i style="background:${segCol(s)}"></i>${esc(lab)}</div><div class="wf-track">
       <div class="wf-bar${s.t1 ? "" : " open"}" style="--i:${i};left:${X(s.t0)};width:${Math.max(0.5, w)}%;background:${segCol(s)}" data-tip="<b>${esc(segName(s))}</b><br>${hm(s.t0)} → ${s.t1 ? hm(s.t1) : esc(T("run.ongoing"))} · ${dur((s.t1 || now) - s.t0)}${s.data && s.data.why ? "<br><span class=m>" + esc(s.data.why) + "</span>" : ""}"></div>
-      <div class="wf-txt" style="--i:${i};${right ? `right:calc(${100 - left}% + 14px)` : `left:calc(${left + w}% + 14px)`}">${esc(bits.join(" · "))}</div>
+      <div class="wf-txt${after || before ? "" : " in"}" style="--i:${i};${after ? `left:calc(${left + w}% + 14px)` : before ? `right:calc(${100 - left}% + 14px)` : `left:calc(${left}% + 8px)`}">${esc(bits.join(" · "))}</div>
       ${s.step === "gate2" && (ok || bad) && s.t1 ? `<div class="wf-mk ${ok ? "ok" : "crit"}" style="left:${X(s.t1)};--i:${i}" data-tip="${esc(segName(s))}: ${esc(T("tk.res_" + res))}">${ok ? "✓" : "✕"}</div>` : ""}${marks}</div></div>`; }).join("");
   const pub = r.marks.find(m => m.type === "publish");
   const rep = d.gate2.map(g => { const v = g.verdicts || {}, tot = Object.values(v).reduce((a, b) => a + b, 0) || 1;

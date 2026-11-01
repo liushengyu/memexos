@@ -54,10 +54,17 @@ def alive(pid) -> bool:
 class _Builder:
     def __init__(self) -> None:
         self.units: list[dict] = []
+        self.ids: set[str] = set()
         self.runs: dict[str, dict] = {}          # run id -> {job, t0, pid, unit, ended}
 
     def unit(self, rs: dict, rid: str, job: str, t: float, kind: str = "job") -> dict:
-        u = {"id": f"{rid}#{len(self.units)}", "run": rid, "job": job, "lane": lane(job), "kind": kind, "t0": t, "t1": None,
+        # the id must not depend on how much of the log was read (the list and the detail view read different windows)
+        uid = f"{rid}#{int(t)}"
+        n = 2
+        while uid in self.ids:
+            uid, n = f"{rid}#{int(t)}-{n}", n + 1
+        self.ids.add(uid)
+        u = {"id": uid, "run": rid, "job": job, "lane": lane(job), "kind": kind, "t0": t, "t1": None,
              "status": "running", "files": [], "branch": "", "segs": [], "marks": [], "cost": 0.0, "note": "", "summary": "",
              "gate2": []}
         self.units.append(u)

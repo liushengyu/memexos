@@ -280,6 +280,7 @@ def cmd_feedback(loader, argv: list[str]) -> int:
            "session": os.environ.get("CLAUDE_CODE_SESSION_ID", ""), "cwd": S.tilde(os.getcwd()), "status": "pending"}
     try:
         append_jsonl(dirs(cfg) / "feedback.jsonl", [rec])
+        event_log.emit(cfg.paths.state, "feedback", page=a.page, kind=a.kind, why=a.why[:300])
         print(i18n.t("usage.feedback_saved", page=a.page))
     except OSError:
         print(i18n.t("usage.feedback_readonly", page=a.page))

@@ -43,9 +43,9 @@ class AnthropicAPI(Backend):
 
     def available(self) -> tuple[bool, str]:
         if not _sdk():
-            return False, 'the anthropic package is not installed (pip install "memexos[anthropic]")'
+            return False, i18n.t("backend.no_sdk")
         if not credentials.get(self.section.get("api_key_env") or "ANTHROPIC_API_KEY"):
-            return False, f"no API key in ${self.section.get('api_key_env') or 'ANTHROPIC_API_KEY'} or the keychain"
+            return False, i18n.t("backend.no_key", env=self.section.get("api_key_env") or "ANTHROPIC_API_KEY")
         return True, ""
 
     def _client(self, timeout: float):

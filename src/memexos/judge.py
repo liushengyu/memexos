@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from memexos import credentials, net
+from memexos import credentials, events, i18n, net
 
 NONE_FITS = "(none of these fits)"
 
@@ -45,10 +46,10 @@ class NoJudge:
     name = "none"
 
     def available(self):
-        return False, "no judge configured"
+        return False, i18n.t("judge.none")
 
     def _no(self, *a, **k):
-        raise JudgeUnavailable("no judge configured")
+        raise JudgeUnavailable(i18n.t("judge.none"))
 
     yes_no = choice = relevance = supported = _no
 
@@ -67,7 +68,7 @@ class LLMJudge:
             ok, why = backends.get(self.cfg, n).available()
             if ok:
                 return True, ""
-        return False, "no worker backend available"
+        return False, i18n.t("judge.no_worker")
 
     def _ask(self, prompt: str, schema: dict, job: str = "judge") -> dict | None:
         from memexos import backends
@@ -140,9 +141,26 @@ SUPPORT_CRITERIA = {"true": "The source states or directly implies everything th
 
 
 # ---------------------------------------------------------------- jev
+class _Meter:
+    """Calls and input tokens of one judging request (which may fan out into many parallel API calls)."""
+
+    def __init__(self):
+        self.calls = self.failed = self.tokens = 0
+        self.t0 = time.time()
+        self.lock = threading.Lock()
+
+    def add(self, tokens: int, ok: bool = True) -> None:
+        with self.lock:
+            self.calls += 1
+            self.failed += 0 if ok else 1
+            self.tokens += tokens
+
+
 class JevJudge:
     """Jev's API: POST {model, state, questions} → {answers: {name: {...}}, usage}. One question per call here,
-    run in parallel. 401/402/403 (bad key, no credit, refused) make it unavailable for the rest of the process."""
+    run in parallel. 401/402/403 (bad key, no credit, refused) make it unavailable for the rest of the process.
+    Each judging request is recorded as one model.call event (role judge, backend jev) with its call count, input
+    tokens and cost at [judge.jev] price_in, so Jev shows up in the console's spending like every other model."""
     name = "jev"
     down: str | None = None
 
@@ -151,14 +169,28 @@ class JevJudge:
         s = cfg.section("judge.jev")
         self.url, self.model = s.get("url"), s.get("model") or "jev-latest"
         self.key_env, self.proxy = s.get("api_key_env") or "JEV_API_KEY", (s.get("proxy") or "").strip()
-        self.tokens = 0
+        self.price_in = float(s.get("price_in") or 0)
+
+    def _record(self, m: _Meter) -> None:
+        if not m.calls:
+            return
+        events.emit(self.cfg.paths.state, "model.call", role="judge", kind="judge", backend="jev", model=self.model,
+                    ok=m.failed < m.calls, seconds=round(time.time() - m.t0, 1),
+                    cost_usd=round(m.tokens * self.price_in / 1e6, 6) if self.price_in else None,
+                    limited=bool(JevJudge.down), transient=False, tokens={"input_tokens": m.tokens, "calls": m.calls}, denials=0)
 
     def available(self):
         if JevJudge.down:
             return False, JevJudge.down
-        return (True, "") if credentials.available(self.key_env) else (False, f"no API key in ${self.key_env}")
+        return (True, "") if credentials.available(self.key_env) else (False, i18n.t("backend.no_key", env=self.key_env))
 
-    def ask(self, state: dict, questions: dict, timeout: float = 60, tries: int = 3) -> dict | None:
+    def ask(self, state: dict, questions: dict, timeout: float = 60, tries: int = 3, meter: _Meter | None = None) -> dict | None:
+        if meter is None:                                    # a direct call is its own request
+            meter = _Meter()
+            try:
+                return self.ask(state, questions, timeout, tries, meter)
+            finally:
+                self._record(meter)
         ok, why = self.available()
         if not ok:
             raise JudgeUnavailable(why)
@@ -170,28 +202,37 @@ class JevJudge:
                 r = net.request(self.url, method="POST", data=body, headers=headers, proxy=proxy, timeout=timeout,
                                 proxy_cacert=self.cfg.get("fetch.proxy_cacert") or None)
                 out = json.loads(r.data)
-                self.tokens += ((out.get("usage") or {}).get("input_tokens") or 0)
+                meter.add((out.get("usage") or {}).get("input_tokens") or 0)
                 return out
             except net.NetError as e:
                 if e.status in (401, 402, 403):
-                    JevJudge.down = {401: "Jev key rejected", 402: "Jev credit used up", 403: "Jev refused access"}[e.status]
+                    meter.add(0, ok=False)
+                    JevJudge.down = i18n.t(f"judge.jev_{e.status}")
                     raise JudgeUnavailable(JevJudge.down)
                 time.sleep(2 * (attempt + 1))
             except Exception:  # noqa: BLE001 — bad answers or network trouble: retry, then give up on this one call
                 time.sleep(2 * (attempt + 1))
+        meter.add(0, ok=False)
         return None
 
-    def yes_no(self, state: dict, instruction: str, criteria: dict | None = None) -> float | None:
+    def _yes_no(self, state: dict, instruction: str, criteria: dict | None, meter: _Meter) -> float | None:
         q = {"q": {"type": "noul", "instructions": instruction, **({"criteria": criteria} if criteria else {})}}
-        r = self.ask(state, q)
+        r = self.ask(state, q, meter=meter)
         try:
             return float(r["answers"]["q"]["noul"]) if r else None
         except (KeyError, TypeError, ValueError):
             return None
 
+    def yes_no(self, state: dict, instruction: str, criteria: dict | None = None) -> float | None:
+        return self.yes_no_many([state], instruction, criteria)[0]
+
     def yes_no_many(self, states: list[dict], instruction: str, criteria: dict | None = None) -> list[float | None]:
-        with ThreadPoolExecutor(10) as ex:
-            return list(ex.map(lambda s: self.yes_no(s, instruction, criteria), states))
+        m = _Meter()
+        try:
+            with ThreadPoolExecutor(10) as ex:
+                return list(ex.map(lambda s: self._yes_no(s, instruction, criteria, m), states))
+        finally:
+            self._record(m)
 
     def choice(self, state: dict, options: dict[str, str], instruction: str) -> dict | None:
         crit = dict(options)

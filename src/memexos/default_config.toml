@@ -108,6 +108,9 @@ url = "https://api.typesafe.ai/v1/systemone"
 model = "jev-latest"
 api_key_env = "JEV_API_KEY"
 proxy = ""
+# USD per million input tokens, used only to show spending in the console and
+# `memex usage`. 0.042 is a measured estimate; set it to your plan's price.
+price_in = 0.042
 
 # ---------------------------------------------------------------------------
 [search]
@@ -132,6 +135,10 @@ collection = "memex"
 embed_model = ""
 # One sentence describing this knowledge base, given to qmd as collection context.
 context = ""
+# Route for qmd's one-time model downloads (about 2 GB from Hugging Face; searching
+# itself is offline): "" = your environment's proxy variables, "direct" = no proxy,
+# or a proxy URL. [fetch] proxy_cacert is passed on when a proxy is used.
+proxy = ""
 
 # ---------------------------------------------------------------------------
 [intake]
@@ -194,7 +201,9 @@ allow_fake_ip = false
 [asr]
 backend = "whisper-cpp"   # whisper-cpp | none
 command = "whisper-cli"
-model = ""                # path to a ggml model file, e.g. ggml-large-v3-turbo-q5_0.bin
+# Path to a ggml model file, e.g. ggml-large-v3-turbo-q5_0.bin. Empty = the first
+# ggml-*.bin in ~/.local/share/memexos/models (where install.sh puts it).
+model = ""
 chunk_seconds = 300
 
 [visual]

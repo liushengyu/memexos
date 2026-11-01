@@ -136,3 +136,19 @@ def test_sqlite_varints():
     assert _varints(bytes([0x02, 0x04])) == [2, 4]
     assert _varints(bytes([0x81, 0x00])) == [128]
     assert _varints(bytes([0x82, 0x2C, 0x05])) == [300, 5]
+
+
+def test_qmd_download_route(home, monkeypatch):
+    from memexos.search import qmd
+    cfg = config.load(home / "v")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:8080")
+    monkeypatch.delenv("NODE_USE_ENV_PROXY", raising=False)
+    monkeypatch.delenv("NODE_EXTRA_CA_CERTS", raising=False)
+    env = qmd._env(cfg)
+    assert env["HTTPS_PROXY"] == "http://proxy.example:8080" and env["NODE_USE_ENV_PROXY"] == "1"
+    cfg.data["search"]["qmd"]["proxy"] = "direct"
+    assert "HTTPS_PROXY" not in qmd._env(cfg)
+    cfg.data["search"]["qmd"]["proxy"] = "http://other.example:3128"
+    cfg.data["fetch"]["proxy_cacert"] = "~/ca.pem"
+    env = qmd._env(cfg)
+    assert env["https_proxy"] == "http://other.example:3128" and env["NODE_EXTRA_CA_CERTS"] == os.path.expanduser("~/ca.pem")

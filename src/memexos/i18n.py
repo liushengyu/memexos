@@ -50,9 +50,11 @@ def _pack(lang: str) -> dict:
     return flat
 
 
-def t(key: str, lang: str | None = None, **kw) -> str:
+def t(name: str, lang: str | None = None, /, **kw) -> str:
+    """The message `name` in `lang` (default: the current language), formatted with kw. The two parameters are
+    positional-only, so placeholders may be called anything, {key} and {name} included."""
     lang = lang or _lang
-    msg = _pack(lang).get(key) or _pack(FALLBACK).get(key) or key
+    msg = _pack(lang).get(name) or _pack(FALLBACK).get(name) or name
     if isinstance(msg, list):
         return msg  # type: ignore[return-value]
     try:
@@ -74,7 +76,7 @@ def _resource(kind: str, name: str, lang: str | None):
     raise FileNotFoundError(f"{kind}/{lang}/{name}")
 
 
-def prompt(name: str, lang: str | None = None, **kw) -> str:
+def prompt(name: str, lang: str | None = None, /, **kw) -> str:
     """Load prompts/<lang>/<name>.md and fill $placeholders (string.Template, so JSON braces are safe)."""
     text = _resource("prompts", name if name.endswith(".md") else name + ".md", lang).read_text(encoding="utf-8")
     return string.Template(text).safe_substitute(**kw) if kw else text

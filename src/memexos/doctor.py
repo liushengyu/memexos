@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import subprocess
 import sys
 from pathlib import Path
 
@@ -12,19 +13,19 @@ from memexos import backends, i18n, judge
 from memexos.search import fts, qmd
 from memexos.util import which
 
-HINTS = {
-    "git": "https://git-scm.com/downloads",
-    "claude": "https://docs.anthropic.com/en/docs/claude-code (npm install -g @anthropic-ai/claude-code)",
-    "codex": "https://github.com/openai/codex (npm install -g @openai/codex)",
-    "qmd": "https://github.com/tobi/qmd (npm install -g @tobilu/qmd), then memex reindex",
-    "node": "https://nodejs.org (needed for qmd's reranker)",
-    "yt-dlp": "https://github.com/yt-dlp/yt-dlp (brew/pipx install yt-dlp)",
-    "ffmpeg": "https://ffmpeg.org (brew install ffmpeg / apt install ffmpeg)",
-    "whisper-cli": "https://github.com/ggml-org/whisper.cpp (brew install whisper-cpp), then set asr.model to a ggml model file",
-    "pdftotext": "poppler (brew install poppler / apt install poppler-utils)",
-    "twitter": "twitter-cli (pipx install twitter-cli), for the x plugin",
-    "bili": "bilibili-cli (pipx install bilibili-cli), for the bilibili plugin search",
-}
+def hint(name: str) -> str:
+    return i18n.t(f"doctor.hint.{name}")
+
+
+def node_major() -> int | None:
+    exe = which("node")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=10).stdout
+        return int(out.strip().lstrip("v").split(".")[0])
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
 
 
 def checks(cfg) -> list[dict]:
@@ -35,7 +36,7 @@ def checks(cfg) -> list[dict]:
 
     core = i18n.t("doctor.section_core")
     add(core, i18n.t("doctor.python", version=platform.python_version()), sys.version_info >= (3, 11), True)
-    add(core, i18n.t("doctor.git"), which("git"), True, HINTS["git"])
+    add(core, i18n.t("doctor.git"), which("git"), True, hint("git"))
     has_vault = (cfg.vault / "raw").is_dir() and (cfg.vault / "AGENTS.md").exists()
     add(core, i18n.t("doctor.vault", path=cfg.vault) if has_vault else i18n.t("doctor.vault_missing", path=cfg.vault), has_vault, True)
     add(core, i18n.t("doctor.config", sources=" < ".join(cfg.sources)), True)
@@ -45,15 +46,23 @@ def checks(cfg) -> list[dict]:
     st = backends.status(cfg)
     for name, s in st.items():
         b = backends.get(cfg, name)
-        label = i18n.t("doctor.backend_cli", name=name, cmd=b.section.get("command")) if name in ("claude-code", "codex") \
-            else i18n.t("doctor.backend_api", name=name, env=b.section.get("api_key_env"))
+        kind = backends.kind_of(cfg, name)
+        if kind in ("claude-code", "codex"):
+            label = i18n.t("doctor.backend_cli", name=name, cmd=b.section.get("command") or ("claude" if kind == "claude-code" else "codex"))
+        elif kind == "openai":
+            label = i18n.t("doctor.backend_openai", name=name, url=b.section.get("base_url") or "-", model=b.section.get("model") or "-")
+        else:
+            label = i18n.t("doctor.backend_api", name=name, env=b.section.get("api_key_env") or "ANTHROPIC_API_KEY")
         if s["exhausted"]:
-            label += f" (quota exhausted at {s['exhausted'].get('at_str')})"
-        add(models, label, s["available"], False, s["why"] or "")
+            label += i18n.t("doctor.quota", at=s["exhausted"].get("at_str"))
+        why = hint("claude" if kind == "claude-code" else "codex") if kind in ("claude-code", "codex") else s["why"]
+        add(models, label, s["available"], False, why if not s["available"] else "")
     for role, required in (("writer", True), ("reviewer", True), ("worker", True), ("vision", False)):
         ch = backends.chain(cfg, role)
         ok = [n for n in ch if n in st and st[n]["available"]]
-        add(models, i18n.t("doctor.role", role=role, chain=" → ".join(ok)) if ok else i18n.t("doctor.role_none", role=role, chain=", ".join(ch)),
+        name = i18n.t(f"console.role.{role}")
+        name = role if name == role else f"{name} ({role})"
+        add(models, i18n.t("doctor.role", role=name, chain=" → ".join(ok)) if ok else i18n.t("doctor.role_none", role=name, chain=", ".join(ch)),
             ok, required)
     j = judge.get(cfg)
     jok, jwhy = j.available() if j.name != "none" else (True, "")
@@ -62,22 +71,32 @@ def checks(cfg) -> list[dict]:
     search = i18n.t("doctor.section_search")
     n = fts.doc_count(cfg.paths.search_index)
     add(search, i18n.t("doctor.search_fts", docs=n if n is not None else 0), n is not None, False, "memex reindex")
-    add(search, i18n.t("doctor.search_qmd"), qmd.ready(cfg), False, HINTS["qmd"])
-    add(search, "node", which("node"), False, HINTS["node"])
+    nm = node_major()
+    add(search, i18n.t("doctor.node", version=nm) if nm else i18n.t("doctor.node_missing"), (nm or 0) >= 22, False, hint("node"))
+    if not qmd.command(cfg):
+        add(search, i18n.t("doctor.search_qmd"), False, False, hint("qmd_install"))
+    elif qmd.ready(cfg):
+        add(search, i18n.t("doctor.search_qmd"), True)
+    else:
+        from memexos import lock
+        building = lock.holder(cfg.paths.locks, "qmd")
+        add(search, i18n.t("doctor.search_qmd_building") if building else i18n.t("doctor.search_qmd_unindexed"), False, False,
+            "" if building else hint("qmd_index"))
     if qmd.package_dir():
         add(search, i18n.t("doctor.search_rerank"), qmd.reranker_model(), False, i18n.t("doctor.search_rerank_hint"))
 
     cap = i18n.t("doctor.section_capture")
     for tool in ("yt-dlp", "ffmpeg", "pdftotext"):
-        add(cap, i18n.t("doctor.tool", name=tool), which(tool), False, HINTS[tool])
+        add(cap, i18n.t("doctor.tool", name=tool), which(tool), False, hint(tool))
     if (cfg.get("asr.backend") or "whisper-cpp") == "whisper-cpp":
         add(cap, i18n.t("doctor.tool", name=cfg.get("asr.command") or "whisper-cli"), which(cfg.get("asr.command") or "whisper-cli"),
-            False, HINTS["whisper-cli"])
-        model = cfg.get("asr.model") or ""
+            False, hint("whisper-cli"))
+        from memexos.capture import asr
+        model = asr.configured_model(cfg)
         add(cap, i18n.t("doctor.asr_model", path=model or "-"), model and Path(model).expanduser().is_file(), False,
-            "download a ggml model, e.g. ggml-large-v3-turbo-q5_0.bin, and set asr.model")
+            hint("asr_model"))
     if cfg.get("plugins.x.enabled"):
-        add(cap, i18n.t("doctor.tool", name="twitter"), which("twitter"), False, HINTS["twitter"])
+        add(cap, i18n.t("doctor.tool", name="twitter"), which("twitter"), False, hint("twitter"))
 
     sched = i18n.t("doctor.section_schedule")
     try:

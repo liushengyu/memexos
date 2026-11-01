@@ -92,3 +92,26 @@ def test_llm_judge_batches(fake, tmp_path, monkeypatch):
     assert len(ps) == 30 and ps[0] == pytest.approx(0.9) and ps[1] == pytest.approx(0.1)
     with pytest.raises(judge.JudgeUnavailable):
         judge.get(fake, "none").yes_no({}, "x")
+
+
+def test_jev_calls_are_recorded_with_cost(home, monkeypatch):
+    from memexos import credentials, net
+    cfg = config.load(home / "v")
+    monkeypatch.setattr(credentials, "get", lambda name: "k")
+    monkeypatch.setattr(credentials, "available", lambda name: True)
+    monkeypatch.setattr(judge.JevJudge, "down", None)
+    sent = []
+
+    def fake_request(url, **kw):
+        sent.append(json.loads(kw["data"]))
+        q = sent[-1]["questions"]["q"]
+        answer = {"noul": 0.8} if q["type"] == "noul" else {"choice": "a", "probabilities": {"a": 0.7}}
+        return net.Response(url, 200, {}, json.dumps({"answers": {"q": answer}, "usage": {"input_tokens": 1000}}).encode())
+    monkeypatch.setattr(net, "request", fake_request)
+    j = judge.get(cfg, "jev")
+    assert j.yes_no_many([{"s": i} for i in range(5)], "ok?") == [0.8] * 5
+    assert j.choice({"s": 1}, {"a": "A", "b": "B"}, "which?")["choice"] == "a"
+    calls = [e["data"] for e in events.read(cfg.paths.state, types=("model.call",))]
+    assert [c["tokens"] for c in calls] == [{"input_tokens": 5000, "calls": 5}, {"input_tokens": 1000, "calls": 1}]
+    assert calls[0]["backend"] == "jev" and calls[0]["role"] == "judge"
+    assert calls[0]["cost_usd"] == pytest.approx(5000 * 0.042 / 1e6)

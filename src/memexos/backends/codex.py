@@ -20,6 +20,7 @@ import time
 import tomllib
 from pathlib import Path
 
+from memexos import i18n
 from memexos.backends.base import NETWORK_RE, QUOTA_RE, Backend, Policy, Result
 from memexos.util import proxy_env, run, which
 
@@ -80,7 +81,7 @@ class Codex(Backend):
         return which(self.section.get("command") or "codex")
 
     def available(self) -> tuple[bool, str]:
-        return (True, "") if self.exe() else (False, f"command `{self.section.get('command') or 'codex'}` not found")
+        return (True, "") if self.exe() else (False, i18n.t("backend.cmd_missing", cmd=self.section.get("command") or "codex"))
 
     def isolated(self) -> bool:
         uc = user_config(str(codex_home()))

@@ -169,14 +169,20 @@ def _interrupt(*_):
     raise KeyboardInterrupt
 
 
+class Server(ThreadingHTTPServer):
+    # A page load opens a dozen connections at once (scripts, fonts, API calls); the default backlog of 5 makes the
+    # system refuse or reset some of them while a slow request is being answered.
+    request_queue_size = 128
+    daemon_threads = True
+
+
 def serve(cfg) -> int:
     con = Console(cfg)
     try:
-        srv = ThreadingHTTPServer((con.host, con.port), handler(con))
+        srv = Server((con.host, con.port), handler(con))
     except OSError as e:
         print(i18n.t("console.cli.port_busy", port=con.port, why=e.strerror), file=sys.stderr)
         return 1
-    srv.daemon_threads = True
     info = {"pid": os.getpid(), "host": con.host, "port": con.port, "started": time.strftime("%F %T")}
     cfg.paths.state.mkdir(parents=True, exist_ok=True)
     atomic_write(pidfile(cfg), json.dumps(info))

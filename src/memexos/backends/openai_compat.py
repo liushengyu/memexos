@@ -48,11 +48,11 @@ class OpenAICompatible(Backend):
 
     def available(self) -> tuple[bool, str]:
         if not self.section.get("base_url"):
-            return False, f"no base_url in [backends.{self.name}]"
+            return False, i18n.t("backend.no_setting", name=self.name, field="base_url")
         if not self.model():
-            return False, f"no model in [backends.{self.name}]"
+            return False, i18n.t("backend.no_setting", name=self.name, field="model")
         if self._key_env() and not credentials.get(self._key_env()):
-            return False, f"no API key in ${self._key_env()} or the keychain (memex secret set {self._key_env()})"
+            return False, i18n.t("backend.no_key", env=self._key_env())
         return True, ""
 
     # -- HTTP --

@@ -58,10 +58,26 @@ def ready(cfg) -> bool:
         return False
 
 
-def _env():
-    # qmd runs local models and reads local files; it needs no proxy, and an inherited
-    # HTTPS proxy with a private CA only makes its model downloads fail.
-    return {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy", "all_proxy")}
+PROXY_VARS = ("https_proxy", "http_proxy", "all_proxy")
+
+
+def _env(cfg) -> dict:
+    """qmd works offline except for its one-time model downloads (from Hugging Face). [search.qmd] proxy picks their
+    route like [fetch] proxy does: "" = the environment's proxy variables, "direct" = none, or a proxy URL. Node only
+    honours proxy variables with NODE_USE_ENV_PROXY=1, and a proxy with its own CA needs NODE_EXTRA_CA_CERTS."""
+    env = dict(os.environ)
+    want = (cfg.get("search.qmd.proxy") or "").strip()
+    if want == "direct":
+        return {k: v for k, v in env.items() if k.lower() not in PROXY_VARS}
+    if want:
+        for k in ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"):
+            env[k] = want
+    if any(k.lower() in PROXY_VARS for k in env):
+        env.setdefault("NODE_USE_ENV_PROXY", "1")
+        ca = cfg.get("fetch.proxy_cacert") or ""
+        if ca and "NODE_EXTRA_CA_CERTS" not in env:
+            env["NODE_EXTRA_CA_CERTS"] = os.path.expanduser(ca)
+    return env
 
 
 def ensure_index(cfg) -> str:
@@ -88,10 +104,10 @@ def update(cfg, embed: bool = True) -> dict:
     if not exe:
         return {"ok": False, "why": "qmd not installed"}
     ensure_index(cfg)
-    out = run([exe, "--index", index_name(cfg), "update"], env=_env(), timeout=3600)
+    out = run([exe, "--index", index_name(cfg), "update"], env=_env(cfg), timeout=3600)
     msg = out.stdout + out.stderr
     if embed and out.returncode == 0:
-        e = run([exe, "--index", index_name(cfg), "embed"], env=_env(), timeout=3600 * 3)
+        e = run([exe, "--index", index_name(cfg), "embed"], env=_env(cfg), timeout=3600 * 3)
         msg += e.stdout + e.stderr
         if e.returncode == 0:              # vectors exist: from now on search may use them
             marker(cfg).parent.mkdir(parents=True, exist_ok=True)
@@ -107,7 +123,7 @@ def query(cfg, mode: str, q: str, n: int, degraded: list) -> list[dict] | None:
         return None
     try:
         r = run([exe, "--index", index_name(cfg), mode, q, "--json", "-n", str(n), "-c", collection(cfg)],
-                env=_env(), timeout=300)
+                env=_env(cfg), timeout=300)
     except Exception as e:  # noqa: BLE001
         degraded.append(f"qmd {mode} failed ({type(e).__name__})")
         return None

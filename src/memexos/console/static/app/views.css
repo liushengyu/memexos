@@ -242,15 +242,16 @@ kbd { font: 500 10px var(--f-num); padding: 1px 5px; border-radius: 4px; box-sha
 .rd-kpis { display: flex; gap: 22px; flex-wrap: wrap; margin: 12px 0 4px; }
 .rd-kpis div span { display: block; font-size: 11px; color: var(--mute); } .rd-kpis div b { font: 500 18px var(--f-num); }
 .wf { position: relative; margin: 16px 0 8px; }
-.wf-axis { position: relative; height: 18px; margin-left: 132px; border-bottom: 1px solid var(--line); }
+.wf-axis { position: relative; height: 18px; margin-left: 156px; border-bottom: 1px solid var(--line); }
 .wf-axis span { position: absolute; transform: translateX(-50%); font: 10px var(--f-num); color: var(--mute); }
-.wf-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); align-items: center; min-height: 30px; font-size: 12px; }
+.wf-row { display: grid; grid-template-columns: 156px minmax(0, 1fr); align-items: center; min-height: 30px; font-size: 12px; }
 .wf-row .lab { color: var(--ink2); display: flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; }
 .wf-row .lab i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 .wf-track { position: relative; height: 30px; border-bottom: 1px dashed rgba(200, 215, 235, .06); }
 .wf-bar { position: absolute; top: 8px; height: 14px; border-radius: 4px; min-width: 3px; transform-origin: left; animation: growX var(--sp-gentle-d) var(--sp-gentle-e) both; animation-delay: calc(var(--i) * 110ms); }
 .wf-bar.open { background-image: repeating-linear-gradient(-45deg, rgba(255, 255, 255, .28) 0 6px, transparent 6px 12px) !important; background-size: 17px 17px; animation: growX var(--sp-gentle-d) var(--sp-gentle-e) both, stripe .8s linear infinite; }
 .wf-txt { position: absolute; top: 6px; white-space: nowrap; font: 11px var(--f-num); color: var(--ink2); pointer-events: none; animation: inFade .6s var(--out) both; animation-delay: calc(var(--i) * 110ms + 300ms); }
+.wf-txt.in { top: 7px; padding: 0 6px; border-radius: 4px; line-height: 16px; color: var(--ink); background: rgba(6, 10, 18, .62); z-index: 1; }
 .wf-mk { position: absolute; top: 3px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; display: grid; place-items: center; font: 600 10px var(--f-num); z-index: 2;
   animation: inPop var(--sp-bouncy-d) var(--sp-bouncy-e) both; animation-delay: calc(var(--i) * 110ms + 400ms); }
 .wf-mk.ok { color: #06140d; background: var(--ok); } .wf-mk.crit { color: #1a0606; background: var(--crit); } .wf-mk.warn { color: #1a1006; background: var(--warn); }

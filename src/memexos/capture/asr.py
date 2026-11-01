@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import collections
 import json
+import os
 import re
 from pathlib import Path
 
@@ -25,8 +26,21 @@ class ASRUnavailable(Exception):
     pass
 
 
-def model_path(cfg) -> Path:
+def models_dir() -> Path:
+    """Where install.sh puts whisper models; used when asr.model is empty."""
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "memexos" / "models"
+
+
+def configured_model(cfg) -> str:
     m = (cfg.get("asr.model") or "").strip()
+    if m:
+        return m
+    found = sorted(models_dir().glob("ggml-*.bin"), key=lambda f: ("large" not in f.name, f.name))
+    return str(found[0]) if found else ""
+
+
+def model_path(cfg) -> Path:
+    m = configured_model(cfg)
     if not m:
         raise ASRUnavailable(i18n.t("asr.no_model"))
     p = Path(m).expanduser()
