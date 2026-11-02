@@ -77,10 +77,10 @@ PROXY_VARS = ("https_proxy", "http_proxy", "all_proxy")
 
 def _env(cfg) -> dict:
     """qmd works offline except for its one-time model downloads (from Hugging Face). [search.qmd] proxy picks their
-    route like [fetch] proxy does: "" = the environment's proxy variables, "direct" = none, or a proxy URL. Node only
+    route ("" = [fetch] proxy, else the environment's proxy variables; "direct" = none; or a proxy URL). Node only
     honours proxy variables with NODE_USE_ENV_PROXY=1, and a proxy with its own CA needs NODE_EXTRA_CA_CERTS."""
     env = dict(os.environ)
-    want = (cfg.get("search.qmd.proxy") or "").strip()
+    want = (cfg.get("search.qmd.proxy") or cfg.get("fetch.proxy") or "").strip()
     if want == "direct":
         return {k: v for k, v in env.items() if k.lower() not in PROXY_VARS}
     if want:

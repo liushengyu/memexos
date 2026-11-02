@@ -759,7 +759,7 @@ login_now = "现在登录 {sites} 吗？每个网站会弹出一个浏览器窗�
 login_done = "{site}：已登录。之后 MemexOS 自己保持这个登录有效。"
 login_failed = "{site}：没有登录成功（{why}）。"
 login_later = "以后登录：memex login {site}（会弹出浏览器窗口）。Agent 也可以替你运行。"
-proxy = "抓网页走哪条路：留空 = 有 HTTPS_PROXY 就用它，direct = 直连，或填代理地址？"
+proxy = "抓网页和下载走哪条路：填代理地址、direct（直连），或留空表示用环境变量里的代理。定时任务看不到你终端里的环境变量，所以这里建议填你现在正在用的代理。"
 cacert = "你的代理是 https:// 的。如果它有自己的 CA 证书，填证书路径（没有就留空）？"
 written = "设置已写入 {path}"
 qmd = "已装 qmd。现在下载检索模型（约 1 GB，存在这台电脑上）并建向量索引吗？"

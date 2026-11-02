@@ -117,6 +117,15 @@ def detect() -> dict:
     return d
 
 
+def env_proxy() -> str:
+    """The proxy this shell uses, proposed as MemexOS's route: scheduled jobs start without the shell's variables, so
+    without it they would fetch directly. Not proposed when it carries a password (it would be written into the
+    settings file); then the setting stays empty and the environment is used where there is one."""
+    import urllib.parse
+    v = next((os.environ[k] for k in ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy") if os.environ.get(k)), "")
+    return "" if not v or urllib.parse.urlsplit(v).password else v
+
+
 def propose(d: dict, extra: str = "") -> dict[str, list[str]]:
     """Who does what, from what is available: the writer and the reviewer from different model families when possible.
     `extra` is an OpenAI-compatible endpoint configured in this run."""
@@ -271,7 +280,7 @@ def cmd_setup(loader, argv: list[str]) -> int:
     if a.plugins is None and not ask.yes:
         plugins = [p.strip() for p in ask.text("plugins", "").split(",") if p.strip()]
     login_from = a.cookie_browser or "memex"
-    proxy = a.proxy if a.proxy is not None else ask.text("proxy", "")
+    proxy = a.proxy if a.proxy is not None else ask.text("proxy", env_proxy())
     cacert = a.proxy_cacert if a.proxy_cacert is not None else (ask.text("cacert", "") if proxy.startswith("https://") else "")
 
     # 5. write the settings

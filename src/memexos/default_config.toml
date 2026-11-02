@@ -146,9 +146,9 @@ context = ""
 # Extra paths (glob patterns relative to the knowledge base) to keep out of the
 # vector index, on top of .memex/, .git/, .obsidian/, raw/assets/, log.md and index.md.
 ignore = []
-# Route for qmd's one-time model downloads (about 2 GB from Hugging Face; searching
-# itself is offline): "" = your environment's proxy variables, "direct" = no proxy,
-# or a proxy URL. [fetch] proxy_cacert is passed on when a proxy is used.
+# Route for qmd's one-time model downloads (about 1 GB from Hugging Face; searching
+# itself is offline): "" = [fetch] proxy, else your environment's proxy variables;
+# "direct" = no proxy; or a proxy URL. [fetch] proxy_cacert is passed on when a proxy is used.
 proxy = ""
 
 # ---------------------------------------------------------------------------

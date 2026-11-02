@@ -762,7 +762,7 @@ login_now = "Log in now to {sites}? A browser window opens for each; log in ther
 login_done = "{site}: logged in. MemexOS keeps this login alive by itself."
 login_failed = "{site}: not logged in ({why})."
 login_later = "To log in later: memex login {site} (a browser window opens). An agent can run it for you."
-proxy = "Route for fetching web pages: empty = use HTTPS_PROXY if set, direct, or a proxy URL?"
+proxy = "Route for fetching web pages and downloads: a proxy URL, direct, or empty for the environment's proxy variables. Scheduled jobs do not see your shell's variables, so the proxy in use now is suggested."
 cacert = "Your proxy uses https://. Path to its CA certificate, if it has its own (empty if not)?"
 written = "Settings written to {path}"
 qmd = "qmd is installed. Download its search models now (about 1 GB, kept on this computer) and build the vector index?"
