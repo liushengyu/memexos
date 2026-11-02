@@ -7,9 +7,11 @@ older content belong to the weekly lint, not to this batch.
 
 from __future__ import annotations
 
+import difflib
 import os
 import re
 import subprocess
+import unicodedata
 from pathlib import Path
 
 from memexos import i18n, rawref
@@ -30,6 +32,24 @@ def git(d: Path, *args: str) -> str:
 def added_lines(d: Path, base: str, path: str) -> str:
     diff = git(d, "diff", "--cached", "-U0", base, "--", path)
     return "\n".join(l[1:] for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++"))
+
+
+def link_key(name: str) -> str:
+    """A loose form of a page name for spotting near misses: no case, quote style, punctuation, spacing or plural -s."""
+    s = unicodedata.normalize("NFKC", name).lower().replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
+    s = re.sub(r"[\s'\"`.,:;!?()\[\]{}_-]+", "", s)
+    return s[:-1] if len(s) > 4 and s.endswith("s") else s
+
+
+def near_miss(target: str, keys: dict[str, str]) -> str | None:
+    """The existing page a dangling link most likely meant, or None when it is plausibly a page still to be written."""
+    k = link_key(target)
+    if not k:
+        return None
+    if k in keys:
+        return keys[k]
+    close = difflib.get_close_matches(k, list(keys), n=1, cutoff=0.9)
+    return keys[close[0]] if close and len(k) >= 6 else None
 
 
 def link_target(raw: str) -> str:
@@ -127,6 +147,13 @@ def check(d: Path, base: str, kind: str = "ingest") -> dict:
         dangling = sorted({link_target(m) for m in WIKILINK.findall(new_text)
                            if link_target(m) and link_target(m).lower() not in names
                            and not link_target(m).lower().endswith((".png", ".jpg", ".jpeg", ".pdf"))})
+        # a link that is almost an existing page name is a mistake, not a page to write later
+        keys = {link_key(Path(v[0]).stem): Path(v[0]).stem for v in pages.values()}
+        for t in list(dangling):
+            meant = near_miss(t, keys)
+            if meant:
+                errors.append(i18n.t("gate1.near_link", path=p, link=t, page=meant))
+                dangling.remove(t)
         if dangling:
             warnings.append(i18n.t("gate1.dangling", path=p, links=", ".join(dangling[:8]) + (" …" if len(dangling) > 8 else "")))
 

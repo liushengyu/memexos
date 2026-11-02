@@ -245,6 +245,7 @@ function buildGraphUI(G) {
     <div class="lg-row">${["source", "raw"].map(sw).join("")}</div>
     <div class="lg-row"><span><i style="background:${GC.accent};box-shadow:0 0 8px ${GC.accent}"></i>${esc(T("graph.just_written"))}</span><span><i style="background:${GC.blue};box-shadow:0 0 8px ${GC.blue}"></i>${esc(T("graph.just_read"))}</span><span class="link">${esc(T("graph.rel_colours"))} ⓘ</span></div>`;
   $("#glegend", core.wrap).dataset.tip = `<b>${esc(T("graph.totals", {w: fmt(G.totals.wiki), r: fmt(G.totals.cited_raw), l: fmt(G.totals.links)}))}</b><br>` +
+    (G.totals.dangling ? `<span class=m>${esc(T("graph.dangling", {d: fmt(G.totals.dangling), names: (G.missing || []).slice(0, 5).map(m => m.name).join(", ")}))}</span><br>` : "") +
     Object.entries(REL_COL).map(([r, c]) => `<span class="tdot" style="background:${c}"></span> ${esc(relName(r))}: ${esc(T("rel_tip." + r))}`).join("<br>") + `<br><span class="m">${esc(T("graph.rel_note"))}</span>`;
   const q = $("#gq", core.wrap), sug = $("#gsug", core.wrap);
   q.oninput = () => { const t = q.value.trim().toLowerCase(); if (!t) { sug.innerHTML = ""; sug.classList.remove("on"); return; }

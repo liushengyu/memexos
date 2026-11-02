@@ -169,3 +169,44 @@ def test_timeline_records_each_step_of_a_batch(vault):
     assert [g["passed"] for g in u["gate2"]] == [False, True]
     assert all(s["t1"] is not None for s in u["segs"])
     assert any(m["type"] == "publish" for m in u["marks"])
+
+
+def _lint_writer(monkeypatch):
+    """A writer whose maintenance pass edits a published page and logs a lint entry."""
+    def agent(self, prompt, *, cwd, workdir, policy, **kw):
+        cwd = Path(cwd)
+        FakeWriter.calls.append(prompt[:60])
+        for p in (cwd / "wiki" / "sources").glob("*.md"):
+            p.write_text(p.read_text().replace("A summary", "A tidied summary"))
+        with open(cwd / "log.md", "a") as f:
+            f.write("\n## [2026-01-02] lint | tidied\n")
+        return Result(ok=True, backend=self.name, text="done")
+    monkeypatch.setattr(FakeWriter, "agent", agent)
+
+
+def test_lint_goes_through_gate2_before_publishing(vault, monkeypatch):
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 0
+    seen = []
+    orig = FakeReviewer.structured
+
+    def spy(self, prompt, schema, **kw):
+        seen.append(prompt)
+        return orig(self, prompt, schema, **kw)
+    monkeypatch.setattr(FakeReviewer, "structured", spy)
+    _lint_writer(monkeypatch)
+    assert C.lint(cfg) == 0
+    assert seen and "maintenance pass" in seen[-1]                         # reviewed with the lint note
+    assert "raw/2026-01-01-web-example-source1.md" in seen[-1]             # against the sources the changed pages cite
+    assert "auto-lint:" in git(vault, "log", "--format=%s")
+
+
+def test_lint_that_fails_review_is_held(vault, monkeypatch):
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 0
+    FakeReviewer.script = ["fail", "fail", "fail", "fail"]
+    _lint_writer(monkeypatch)
+    before = (vault / "wiki" / "sources" / "example-source1.md").read_text()
+    assert C.lint(cfg) == 1
+    assert (vault / "wiki" / "sources" / "example-source1.md").read_text() == before   # nothing unreviewed reached the vault
+    assert "auto-lint:" not in git(vault, "log", "--format=%s")

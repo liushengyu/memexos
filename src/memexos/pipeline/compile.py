@@ -22,7 +22,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from memexos import backends, events, i18n, lock
+from memexos import backends, events, i18n, lock, rawref
 from memexos.pipeline import gate1, gate2, report, selfcheck
 from memexos.pipeline.stage import Stage, add_to_ledger, git, ledger, next_batch, pending_feedback, pending_raw
 
@@ -305,7 +305,22 @@ def usage_summary(cfg) -> str:
         return i18n.t("pipeline.no_usage")
 
 
+def cited_raws(stage: Stage) -> list[str]:
+    """The raw files that the wiki pages changed in this stage cite: the sources a review checks them against."""
+    changed = [p for p in git(stage.dir, "diff", "--name-only", "-z", stage.base, "--", "wiki").split("\0") if p]
+    changed += [p for p in git(stage.dir, "ls-files", "--others", "--exclude-standard", "-z", "wiki").split("\0") if p]
+    names = rawref.index(stage.dir)
+    out: set[str] = set()
+    for p in dict.fromkeys(changed):
+        f = stage.dir / p
+        if f.is_file():
+            out |= {r for r in rawref.find(f.read_text(encoding="utf-8", errors="replace"), names, stage.dir)
+                    if (stage.dir / r).exists()}
+    return sorted(out)
+
+
 def lint(cfg) -> int:
+    """The weekly maintenance pass. Like every change to the wiki it goes through gate 1 and gate 2 before it is published."""
     try:
         with lock.held(cfg.paths.locks, "write", wait=5400):
             stage = Stage(cfg).open()
@@ -316,6 +331,14 @@ def lint(cfg) -> int:
                 return 1
             if c == 2:
                 stage.hold(i18n.t("pipeline.gate1_failed", rounds=cfg.get("pipeline.gate1_fix_rounds") or 2), [], w.report)
+                return 1
+            outcome, _, rep = review_loop(cfg, stage, w, cited_raws(stage), "lint", "lint_passed", "lint",
+                                          fix_prompt_key="rework_again", what=i18n.t("pipeline.what_lint"))
+            if outcome == "unavailable":
+                stage.discard(i18n.t("pipeline.gate2_unavailable"))
+                return 1
+            if outcome not in ("passed", "off"):
+                stage.hold(i18n.t("pipeline.lint_failed"), [], json.dumps(rep.get("errors"), ensure_ascii=False, indent=1))
                 return 1
             if not stage.publish(f"auto-lint: {today()}"):
                 stage.hold(i18n.t("pipeline.merge_failed"), [])
