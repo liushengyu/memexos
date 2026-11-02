@@ -201,24 +201,31 @@ def cmd_reindex(loader, argv: list[str]) -> int:
 
 def _reindex(cfg, a) -> int:
     """The full-text index first (seconds), then qmd under its own lock: a first embedding pass downloads models and
-    can take hours or hang on the network, and must never keep new pages out of the full-text index meanwhile."""
+    can take hours or hang on the network, and must never keep new pages out of the full-text index meanwhile.
+    A reindex asked for while one is running is not dropped: the running one goes once more when it finishes, so
+    pages published during its run are indexed too."""
     from memexos import lock
-    try:
-        with lock.held(cfg.paths.locks, "reindex"), events.step(cfg.paths.state, "index"):
+
+    def full_text():
+        with events.step(cfg.paths.state, "index"):
             r = fts.update(cfg.vault, cfg.paths.search_index)
+            if r.get("rebuilt"):
+                events.emit(cfg.paths.state, "index.rebuilt", why=r["rebuilt"], docs=r["docs"])
+                print(i18n.t("reindex.rebuilt", why=r["rebuilt"]))
             if r["added"] or r["updated"] or r["removed"]:
-                events.emit(cfg.paths.state, "index.update", **r)
+                events.emit(cfg.paths.state, "index.update", **{k: v for k, v in r.items() if k != "rebuilt"})
             print(i18n.t("event.index.update", **r))
-    except lock.Busy:
+
+    def vectors():
+        with events.step(cfg.paths.state, "embed") as info:
+            q = qmd.update(cfg, embed=not a.no_embed)
+            info["result"] = "ok" if q.get("ok") else "error"
+            events.emit(cfg.paths.state, "index.qmd", **q)
+            print(f"qmd: {q.get('summary') or ('ok' if q['ok'] else q.get('why'))}")
+
+    if not lock.coalesced(cfg.paths.locks, "reindex", full_text):
         print(i18n.t("reindex.busy"))
     want = cfg.get("search.backend") or "auto"
-    if want == "qmd" or (want == "auto" and qmd.command(cfg)):
-        try:
-            with lock.held(cfg.paths.locks, "qmd"), events.step(cfg.paths.state, "embed") as info:
-                q = qmd.update(cfg, embed=not a.no_embed)
-                info["result"] = "ok" if q.get("ok") else "error"
-                events.emit(cfg.paths.state, "index.qmd", **q)
-                print(f"qmd: {q.get('summary') or ('ok' if q['ok'] else q.get('why'))}")
-        except lock.Busy:
-            print(i18n.t("reindex.qmd_busy"))
+    if (want == "qmd" or (want == "auto" and qmd.command(cfg))) and not lock.coalesced(cfg.paths.locks, "qmd", vectors):
+        print(i18n.t("reindex.qmd_busy"))
     return 0

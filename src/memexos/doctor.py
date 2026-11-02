@@ -72,7 +72,10 @@ def checks(cfg) -> list[dict]:
 
     search = i18n.t("doctor.section_search")
     n = fts.doc_count(cfg.paths.search_index)
-    add(search, i18n.t("doctor.search_fts", docs=n if n is not None else 0), n is not None, False, "memex reindex")
+    if fts.damage_note(cfg.paths.search_index).exists():
+        add(search, i18n.t("doctor.search_fts_damaged"), False, False, "memex reindex")
+    else:
+        add(search, i18n.t("doctor.search_fts", docs=n if n is not None else 0), n is not None, False, "memex reindex")
     nm = node_major()
     add(search, i18n.t("doctor.node", version=nm) if nm else i18n.t("doctor.node_missing"), (nm or 0) >= 22, False, hint("node"))
     if not qmd.command(cfg):
