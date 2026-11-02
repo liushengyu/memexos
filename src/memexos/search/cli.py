@@ -29,7 +29,7 @@ def _fm_list(v) -> str:
     return "、".join(v) if isinstance(v, list) and i18n.language() == "zh" else ", ".join(v) if isinstance(v, list) else str(v or "")
 
 
-_compiled: dict | None = None
+_compiled: dict[str, dict] = {}            # per knowledge base: raw file → the wiki page compiled from it
 SOURCES_HEADING = re.compile(r"(?ms)^#{2,3}\s*(?:Sources|来源)\b.*?(?=^## |\Z)")
 
 
@@ -50,8 +50,8 @@ def primary_raw(page_text: str, names: set[str], vault: Path) -> str | None:
 
 def compiled_page(vault: Path, raw: str) -> str | None:
     """The wiki source page that summarizes this raw file (else the first source page citing it)."""
-    global _compiled
-    if _compiled is None:
+    key = str(vault)
+    if key not in _compiled:
         own, cited = {}, {}
         names = rawref.index(vault)
         for p in sorted(glob.glob(str(vault / "wiki" / "sources" / "*.md"))):
@@ -64,8 +64,8 @@ def compiled_page(vault: Path, raw: str) -> str | None:
                 own.setdefault(prim, Path(p).stem)
             for r in rawref.find(text, names, vault):
                 cited.setdefault(r, Path(p).stem)
-        _compiled = {**cited, **own}
-    return _compiled.get(raw)
+        _compiled[key] = {**cited, **own}
+    return _compiled[key].get(raw)
 
 
 def describe(cfg, hit: dict) -> tuple[str, str, str | None]:
@@ -103,7 +103,8 @@ def describe(cfg, hit: dict) -> tuple[str, str, str | None]:
 def cmd_search(loader, argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="memex search", add_help=False)
     ap.add_argument("query")
-    ap.add_argument("--kw", help="2–5 keywords, space separated")
+    ap.add_argument("--kw", action="append", help="2–5 keywords: space separated in one --kw (quote a phrase inside it), "
+                    "or one --kw per keyword")
     ap.add_argument("-n", type=int, default=8)
     ap.add_argument("--mode", choices=engine.MODES, default="auto")
     ap.add_argument("--json", action="store_true")
@@ -113,7 +114,7 @@ def cmd_search(loader, argv: list[str]) -> int:
     if _no_vault(cfg):
         return 1
     t0 = time.time()
-    found, kws, degraded = engine.search(cfg, a.query, a.kw.split() if a.kw else None, a.n + 6, a.mode, a.inbox or None)
+    found, kws, degraded = engine.search(cfg, a.query, keyword_list(a.kw), a.n + 6, a.mode, a.inbox or None)
     hits = [dict(h, **detail(cfg, h, kws, a.query)) for h in found]
     hits = dedupe(hits)[:a.n]
     note_search(cfg, a.query, a.mode, len(hits), time.time() - t0, top=[h["path"] for h in hits[:10]])
@@ -147,13 +148,33 @@ def cmd_search(loader, argv: list[str]) -> int:
     return 0
 
 
-_raw_names: set | None = None
+def keyword_list(values: list[str] | None) -> list[str] | None:
+    """The keywords in whichever form an agent wrote them: one --kw with words separated by spaces (a quoted phrase
+    kept whole: --kw '"rank fusion" RRF') or by commas (--kw "rank fusion, RRF"); or one --kw per keyword
+    (--kw Leitner --kw "spaced repetition")."""
+    if not values:
+        return None
+    out: list[str] = []
+    for v in values:
+        if "," in v or "，" in v or "、" in v:
+            out += [x.strip() for x in re.split(r"[,，、]", v)]
+        elif len(values) > 1:
+            out.append(v.strip())
+        else:
+            import shlex
+            try:
+                out += shlex.split(v)
+            except ValueError:
+                out += v.split()
+    return [k for k in out if k.strip()] or None
+
+
+_raw_names: dict[str, set] = {}
 
 
 def detail(cfg, hit: dict, kws: list[str], question: str) -> dict:
     """What an agent needs to judge a hit without opening it: kind, classification, the wiki page a raw file was
     compiled into, how many sources a wiki page rests on, which keywords it contains, and the passage where they meet."""
-    global _raw_names
     kind, cls, page = describe(cfg, hit)
     try:
         text = (cfg.vault / hit["path"]).read_text(encoding="utf-8", errors="replace")[:400_000]
@@ -164,9 +185,10 @@ def detail(cfg, hit: dict, kws: list[str], question: str) -> dict:
            "matched": T.matched(hit.get("title", "") + "\n" + body, kws) if kws else [],
            "snippet": T.snippet(body, (kws or []) + [question]) if body else hit.get("snippet", "")}
     if hit["path"].startswith("wiki/") and body:
-        if _raw_names is None:
-            _raw_names = rawref.index(cfg.vault)
-        out["sources"] = len(set(rawref.find(body, _raw_names, cfg.vault))) or None
+        if str(cfg.vault) not in _raw_names:
+            _raw_names[str(cfg.vault)] = rawref.index(cfg.vault)
+        names = _raw_names[str(cfg.vault)]
+        out["sources"] = len(set(rawref.find(body, names, cfg.vault))) or None
     return out
 
 

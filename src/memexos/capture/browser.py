@@ -97,8 +97,11 @@ class Browser:
 
     # -------------------------------------------------------- process
     def args(self) -> list[str]:
+        # no traffic of its own (updates, safe-browsing lists, metrics): it only opens the sites it is sent to, through
+        # the route MemexOS gives it
         a = [self.exe, f"--user-data-dir={self.profile}", "--remote-debugging-pipe", "--no-first-run",
-             "--no-default-browser-check", "--disable-sync", "--use-mock-keychain", "--password-store=basic"]
+             "--no-default-browser-check", "--disable-sync", "--use-mock-keychain", "--password-store=basic",
+             "--disable-background-networking", "--disable-component-update", "--no-pings", "--metrics-recording-only"]
         if self.headless:
             a += ["--headless=new", "--mute-audio"]
         if self.user_agent:
@@ -118,15 +121,17 @@ class Browser:
         os.chmod(self.profile, 0o700)
         try:
             return self._start()
-        except BrowserError:
+        except BrowserError as e:
             # Chrome builds without a system AppArmor profile (Chrome for Testing, Chromium from a download) cannot use
             # their sandbox on Ubuntu 23.10+ or in containers. The sites visited are the few the owner logs in to.
             if self.sandbox and "No usable sandbox" in self.err_text:
                 self.sandbox = False
                 return self._start()
+            if "no answer" in str(e):          # a first start on a slow or busy machine: once more, with more patience
+                return self._start(wait=120)
             raise
 
-    def _start(self) -> Browser:
+    def _start(self, wait: float = 45) -> Browser:
         self._id, self._buf, self.err_text = 0, b"", ""
         to_r, self._to = os.pipe()
         self._from, from_w = os.pipe()
@@ -145,7 +150,7 @@ class Browser:
             os.close(to_r)
             os.close(from_w)
         try:
-            self.call("Browser.getVersion", timeout=30)
+            self.call("Browser.getVersion", timeout=wait)
         except BrowserError:
             self._kill()
             raise

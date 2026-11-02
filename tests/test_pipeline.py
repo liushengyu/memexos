@@ -97,6 +97,8 @@ def test_ingest_publishes_reviewed_batch(vault):
     assert "staging/" not in git(vault, "branch")
     review = next((vault / "inbox").glob("*-review.md")).read_text()
     assert "No problems found" in review
+    from memexos.search import fts                                       # searchable the moment it is published
+    assert "wiki/sources/example-source1.md" in [h["path"] for h in fts.search(vault, cfg.paths.search_index, ["example"], 20)]
 
 
 def test_review_failure_goes_back_to_writer_then_publishes(vault):

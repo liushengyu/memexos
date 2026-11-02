@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
+import os
 import sys
+import time
 
 from memexos import __version__, i18n
 from memexos import config as config_mod
@@ -124,8 +127,41 @@ def cmd_resume(cfg_loader, argv: list[str]) -> int:
     return 0
 
 
+# In an evaluation run (MEMEX_TRACE names a file) every call is recorded with its arguments and exit status, whichever
+# agent made it, and commands with side effects only print what they would do (MEMEX_EVAL_STUB, see evals/tooluse.py).
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    trace = os.environ.get("MEMEX_TRACE")
+    if not trace:
+        return _main(argv)
+    t0, code = time.time(), 1
+    try:
+        code = _stub(argv)
+        if code is None:
+            code = _main(argv)
+        return code
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+        raise
+    finally:
+        try:
+            with open(trace, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"ts": round(t0, 3), "argv": argv, "exit": code, "secs": round(time.time() - t0, 2)},
+                                   ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+
+
+def _stub(argv: list[str]) -> int | None:
+    """Commands that would change something are only recorded during an evaluation; returns None to run for real."""
+    stubbed = {c for c in os.environ.get("MEMEX_EVAL_STUB", "").split(",") if c}
+    if argv and argv[0] in stubbed and not (argv[1:2] and argv[1] in ("-h", "--help")):
+        print(f"(evaluation) `memex {' '.join(argv)}` was recorded and not carried out; treat it as done.")
+        return 0
+    return None
+
+
+def _main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help"):
         argv = ["help", *argv[1:]]
     if argv[0] in ("-V", "--version"):
