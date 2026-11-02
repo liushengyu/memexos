@@ -58,6 +58,10 @@ flowchart TB
   COLLECT --> RAW --> SORT --> COMPILE
   G2 -- "passes" --> PUB
   G2 -. "still failing" .-> HOLD
+  style COLLECT fill:none,stroke:#6f9bff,stroke-width:1px
+  style SORT fill:none,stroke:#6f9bff,stroke-width:1px
+  style COMPILE fill:none,stroke:#6f9bff,stroke-width:1px
+  style PUBLISH fill:none,stroke:#6f9bff,stroke-width:1px
 ```
 
 ## The vault
@@ -188,6 +192,7 @@ flowchart LR
   LOG --> TXT
   LOG --> VIEWS
   OWN --> VIEWS
+  style WRITERS fill:none,stroke:#6f9bff,stroke-width:1px
 ```
 
 Where: `<state>/events/YYYY-MM.jsonl`, one JSON object per line, one file per month. Months older than
@@ -272,6 +277,9 @@ flowchart TB
   AN ~~~ OA ~~~ JEV
   ROLES -- "defaults; a backend out of quota is skipped for a while" --> CLI
   ROLES -. "or" .-> HTTP
+  style ROLES fill:none,stroke:#6f9bff,stroke-width:1px
+  style CLI fill:none,stroke:#6f9bff,stroke-width:1px
+  style HTTP fill:none,stroke:#6f9bff,stroke-width:1px
 ```
 
 Every model call in the system, by step:

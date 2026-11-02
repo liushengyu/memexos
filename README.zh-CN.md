@@ -91,6 +91,10 @@ flowchart TB
   COLLECT --> RAW --> SORT --> COMPILE
   G2 -- "通过" --> PUB
   G2 -. "仍不通过" .-> HOLD
+  style COLLECT fill:none,stroke:#6f9bff,stroke-width:1px
+  style SORT fill:none,stroke:#6f9bff,stroke-width:1px
+  style COMPILE fill:none,stroke:#6f9bff,stroke-width:1px
+  style PUBLISH fill:none,stroke:#6f9bff,stroke-width:1px
 ```
 
 不过两道检查，任何内容都进不了 `wiki/`。门 1 是程序，不是模型；门 2 用的是和编写模型不同的另一家模型，这样编写模型
@@ -210,6 +214,9 @@ flowchart TB
   AN ~~~ OA ~~~ JEV
   ROLES -- "默认；额度用完的后端暂时跳过，下一个接替" --> CLI
   ROLES -. "或者" .-> HTTP
+  style ROLES fill:none,stroke:#6f9bff,stroke-width:1px
+  style CLI fill:none,stroke:#6f9bff,stroke-width:1px
+  style HTTP fill:none,stroke:#6f9bff,stroke-width:1px
 ```
 
 **用 Codex，还是用 OpenAI 的 API 密钥？** 两条路都能用到 OpenAI 的模型，但走法不一样：

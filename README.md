@@ -95,6 +95,10 @@ flowchart TB
   COLLECT --> RAW --> SORT --> COMPILE
   G2 -- "passes" --> PUB
   G2 -. "still failing" .-> HOLD
+  style COLLECT fill:none,stroke:#6f9bff,stroke-width:1px
+  style SORT fill:none,stroke:#6f9bff,stroke-width:1px
+  style COMPILE fill:none,stroke:#6f9bff,stroke-width:1px
+  style PUBLISH fill:none,stroke:#6f9bff,stroke-width:1px
 ```
 
 Nothing reaches `wiki/` without passing both gates. Gate 1 is code, not a model; gate 2 is a different model family
@@ -217,6 +221,9 @@ flowchart TB
   AN ~~~ OA ~~~ JEV
   ROLES -- "defaults; a backend out of quota is skipped for a while" --> CLI
   ROLES -. "or" .-> HTTP
+  style ROLES fill:none,stroke:#6f9bff,stroke-width:1px
+  style CLI fill:none,stroke:#6f9bff,stroke-width:1px
+  style HTTP fill:none,stroke:#6f9bff,stroke-width:1px
 ```
 
 **Codex or an OpenAI API key?** Both can reach OpenAI's models, in different ways:
