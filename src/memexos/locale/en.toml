@@ -57,6 +57,7 @@ role = "{role} → {chain}"
 role_none = "{role}: none of [{chain}] is available"
 judge = "judge: {backend}"
 search_fts = "built-in full-text index ({docs} documents)"
+search_fts_damaged = "built-in full-text index: damaged; search scans the files until the next memex reindex rebuilds it"
 search_qmd = "qmd (vector search + local reranker)"
 search_rerank = "qmd reranker model downloaded (used by search.rerank = auto)"
 search_rerank_hint = "run any `qmd query` once to download it, or set search.rerank = \"qmd\" to download on first search"
@@ -117,6 +118,7 @@ admin = """Maintenance commands (normally run by the scheduler; you can run them
 "step.start" = "{label}…"
 "step.end" = "{label} done ({seconds}s)"
 "index.update" = "search index: {added} added, {updated} updated, {removed} removed ({seconds}s)"
+"index.rebuilt" = "search index was damaged and rebuilt from the files ({why})"
 "index.qmd" = "vector index updated"
 search = "an agent searched “{query}” ({hits} hits, {seconds}s)"
 "read" = "an agent opened {path}"
@@ -218,8 +220,9 @@ not_found = "No page named {page} (try memex search, or read index.md)"
 header = "# {path} (lines {start}–{end} of {total})"
 
 [reindex]
-qmd_busy = "qmd is still updating from an earlier run; the full-text index is current."
-busy = "Another reindex is running; skipped."
+qmd_busy = "qmd is still updating from an earlier run; it will update once more when it finishes. The full-text index is current."
+busy = "Another reindex is running; it will run once more when it finishes, so nothing is left out."
+rebuilt = "The full-text index was damaged ({why}); rebuilt it from the files."
 
 [gate1]
 raw_touched = "raw/ was changed ({status}): {path}. raw/ is read-only; compiling may not add, change or delete anything there"

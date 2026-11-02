@@ -54,6 +54,28 @@ def held(locks_dir: Path, name: str, wait: float = 0.0, poll: float = 15.0):
             f.close()
 
 
+def coalesced(locks_dir: Path, name: str, work, max_rounds: int = 5) -> bool:
+    """Run work() under lock `name`; when another process holds it, leave a request instead, so that process runs
+    work() once more after it finishes. Changes made while a run is under way are then never left out, and any
+    number of requests during one run cost a single extra run. Returns whether this process ran work()."""
+    locks_dir.mkdir(parents=True, exist_ok=True)
+    again = locks_dir / f"{name}.again"
+    again.touch()
+    ran, rounds = False, 0
+    while rounds < max_rounds:
+        try:
+            with held(locks_dir, name):
+                while again.exists() and rounds < max_rounds:
+                    again.unlink(missing_ok=True)       # before the run: a request arriving during it asks for one more
+                    work()
+                    ran, rounds = True, rounds + 1
+        except Busy:
+            return ran                                 # the holder sees the request after its current run
+        if not again.exists():                         # a request may land between the last check and the release
+            return ran
+    return ran
+
+
 def holder(locks_dir: Path, name: str) -> int | None:
     """PID holding the lock, or None when free."""
     path = locks_dir / f"{name}.lock"

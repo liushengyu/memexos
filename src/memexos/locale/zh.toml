@@ -57,6 +57,7 @@ role = "{role} → {chain}"
 role_none = "{role}：[{chain}] 里没有一个可用"
 judge = "判断模型：{backend}"
 search_fts = "内置全文索引（{docs} 份文档）"
+search_fts_damaged = "内置全文索引已损坏；下次 memex reindex 重建之前，检索直接扫描文件"
 search_qmd = "qmd（向量检索 + 本地重排模型）"
 search_rerank = "qmd 的重排模型已下载（search.rerank = auto 时使用）"
 search_rerank_hint = "随便运行一次 `qmd query` 下载它，或设 search.rerank = \"qmd\"，在第一次检索时下载"
@@ -117,6 +118,7 @@ admin = """维护命令（一般由定时任务调用，也可以手动运行）
 "step.start" = "{label}……"
 "step.end" = "{label}完成（{seconds} 秒）"
 "index.update" = "检索索引：新增 {added}、更新 {updated}、删除 {removed}（{seconds} 秒）"
+"index.rebuilt" = "检索索引损坏，已从文件重建（{why}）"
 "index.qmd" = "向量索引已更新"
 search = "有 Agent 检索了「{query}」（{hits} 条结果，{seconds} 秒）"
 "read" = "有 Agent 打开了 {path}"
@@ -215,8 +217,9 @@ not_found = "找不到页面：{page}（用 memex search 找，或看 index.md�
 header = "# {path}（第 {start}–{end} 行，共 {total} 行）"
 
 [reindex]
-qmd_busy = "qmd 还在跑上一次的更新；全文索引已经是最新的。"
-busy = "另一个重建索引的任务在运行，跳过。"
+qmd_busy = "qmd 还在跑上一次的更新，跑完后会再更新一次；全文索引已经是最新的。"
+busy = "另一个重建索引的任务在运行；它跑完后会再跑一次，这次的改动不会漏掉。"
+rebuilt = "全文索引已损坏（{why}），已从文件重建。"
 
 [gate1]
 raw_touched = "raw/ 被改动（{status}）：{path}。raw 只读，编译不能新增、修改或删除 raw 下的文件"

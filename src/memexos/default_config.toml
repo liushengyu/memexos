@@ -133,12 +133,16 @@ include_inbox = false
 command = "qmd"
 index = ""          # qmd --index name; empty = "memexos-<vault id>" (kept apart from your other qmd collections)
 collection = "memex"
-# Embedding model for qmd (written into the index config on first `memex reindex`).
-# Empty = qmd's default. For Chinese or Japanese content a multilingual model works much better, e.g.
-# "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf"
-embed_model = ""
+# Embedding model for qmd, as a Hugging Face model URI. "auto" = by the knowledge
+# base's language: Qwen3-Embedding-0.6B for Chinese (qmd's default model is weak
+# on Chinese), qmd's default (embeddinggemma) otherwise. "" = always qmd's default.
+# Changing it makes the next `memex reindex` embed everything again.
+embed_model = "auto"
 # One sentence describing this knowledge base, given to qmd as collection context.
 context = ""
+# Extra paths (glob patterns relative to the knowledge base) to keep out of the
+# vector index, on top of .memex/, .git/, .obsidian/, raw/assets/ and log.md.
+ignore = []
 # Route for qmd's one-time model downloads (about 2 GB from Hugging Face; searching
 # itself is offline): "" = your environment's proxy variables, "direct" = no proxy,
 # or a proxy URL. [fetch] proxy_cacert is passed on when a proxy is used.
