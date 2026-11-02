@@ -34,6 +34,68 @@
 | ![使用情况：Agent 问了什么、帮上忙的比例、读得最多的页面](docs/images/console-usage-zh.jpg) | ![质量与成本：首审通过率、审校不通过的原因、按角色的每日花费](docs/images/console-quality-zh.jpg) |
 | **知识到底有没有用？** 从 Agent 的真实会话里统计。 | **能不能信、花了多少钱？** |
 
+## 它是怎么工作的
+
+![来源经过采集准入进入 raw/，在暂存副本里经过编写、门 1、自查、门 2，发布成 wiki，由你的 Agent 检索；使用反馈再流回来](docs/images/architecture-zh.jpg)
+
+凡是需要判断的步骤，都交给某个模型**角色**来做；其余步骤都是程序。下面是一份资料走过的完整路径，每一步用的角色用粗体
+标出（每个角色具体用哪个模型由你决定，见[模型怎么配](#模型怎么配)）：
+
+```mermaid
+flowchart TB
+  classDef model fill:#1d3a7a,stroke:#6f9bff,color:#eef2f7
+  classDef prog fill:#1b2333,stroke:#7b8697,color:#eef2f7
+  classDef store fill:#2a2418,stroke:#e7c792,color:#f5e9d3
+  classDef human fill:#3a2f16,stroke:#e7c792,color:#f5e9d3
+
+  subgraph COLLECT["1 · 采集（每天夜里）"]
+    direction LR
+    SRC["来源<br/>YouTube · B 站 · X · RSS<br/>网页 · Agent 会话"]:::prog
+    ADM["准入：留还是不留<br/><b>杂活 worker</b>"]:::model
+    CAP["保存<br/>抓网页 · 字幕<br/>whisper.cpp 本地转写"]:::prog
+    VIS["画面笔记<br/>转写太薄的视频<br/><b>看画面 vision</b>"]:::model
+    SRC --> ADM --> CAP --> VIS
+  end
+
+  RAW[("raw/ · 原始资料，只增不改")]:::store
+
+  subgraph SORT["2 · 分类"]
+    direction LR
+    SCR["领域初筛<br/><b>评判 judge</b>"]:::model
+    CLS["领域 · 证据强度 · 内容类型<br/><b>杂活 worker</b>"]:::model
+    SCR --> CLS
+  end
+
+  subgraph COMPILE["3 · 在暂存副本（git worktree）里编译"]
+    direction LR
+    WR["写页面<br/><b>编写 writer</b>"]:::model
+    G1{"门 1<br/>程序检查"}:::prog
+    SC["自查<br/>逐句对照来源<br/><b>评判 judge</b>"]:::model
+    G2{"门 2<br/>独立审校<br/><b>审校 reviewer</b>"}:::model
+    WR --> G1 -- "通过" --> SC --> G2
+    G1 -- "不通过：返工" --> WR
+    SC -- "找不到依据：返工" --> WR
+    G2 -- "有问题：返工" --> WR
+  end
+
+  subgraph PUBLISH["4 · 发布"]
+    direction LR
+    PUB["合并<br/>一次 git 提交"]:::prog
+    IDX["更新索引<br/>全文索引 + qmd<br/>（本地模型）"]:::prog
+    WIKI[("wiki/ · Agent 检索的就是它")]:::store
+    PUB --> IDX --> WIKI
+  end
+
+  HOLD["N 轮后仍不通过就扣下<br/>→ 进你的收件箱"]:::human
+
+  COLLECT --> RAW --> SORT --> COMPILE
+  G2 -- "通过" --> PUB
+  G2 -. "仍不通过" .-> HOLD
+```
+
+不过两道检查，任何内容都进不了 `wiki/`。门 1 是程序，不是模型；门 2 用的是和编写模型不同的另一家模型，这样编写模型
+自己看不出的错，不会再被同样的盲点放过去。
+
 ## 灵感和指导思想
 
 MemexOS 的出发点是 Andrej Karpathy 提出的 [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
@@ -112,20 +174,58 @@ memex schedule install                 # 每晚采集、每小时编译、定时
 
 ## 模型怎么配
 
-工作分成几个角色，每个角色按顺序尝试一串模型后端；一个后端额度用完，下一个自动接替。`memex setup` 会检测你装了
-什么并给出分工建议，`memex doctor` 随时显示当前分工。
+工作分成几个角色。每个角色有一串后端，按顺序用第一个可用的；某个后端额度用完，下一个自动接替一段时间。`memex setup`
+会检测你装了什么并给出建议，`memex doctor` 随时显示当前分工。
 
-| 角色 | 负责 | 常见选择 |
+```mermaid
+flowchart TB
+  classDef role fill:#1d3a7a,stroke:#6f9bff,color:#eef2f7
+  classDef cli fill:#1b2333,stroke:#b9c3d1,color:#eef2f7
+  classDef api fill:#2a2418,stroke:#e7c792,color:#f5e9d3
+
+  subgraph ROLES["角色 · 每个角色按列表从左到右尝试 · 配置在 [models]"]
+    direction LR
+    WRITER["<b>编写 writer</b><br/>写页面 · 返工 · 修补<br/>claude-code"]:::role
+    REVIEWER["<b>审校 reviewer</b><br/>门 2 · 测评出题<br/>codex → claude-code"]:::role
+    WORKER["<b>杂活 worker</b><br/>准入 · 分类<br/>收件箱 · 使用复盘<br/>claude-code"]:::role
+    VISION["<b>看画面 vision</b><br/>视频画面<br/>codex → claude-code"]:::role
+    JUDGE["<b>评判 judge</b><br/>自查 · 初筛<br/>claude-code:sonnet → codex"]:::role
+  end
+
+  subgraph CLI["你已经登录的命令行工具 · 不需要 API 密钥"]
+    direction LR
+    CC["<b>claude-code</b> · Claude Code<br/>Claude 订阅或 Anthropic 密钥"]:::cli
+    CX["<b>codex</b> · Codex<br/>ChatGPT 订阅或 OpenAI 密钥"]:::cli
+  end
+
+  subgraph HTTP["由 MemexOS 直接调用的 HTTP 接口 · 可选，加进任何角色的列表"]
+    direction LR
+    AN["<b>anthropic</b><br/>Anthropic API 密钥"]:::api
+    OA["<b>openai</b> 类型，名字随意<br/>OpenAI · DeepSeek · Gemini · OpenRouter<br/>或本地 Ollama · LM Studio · vLLM"]:::api
+    JEV["<b>Jev</b><br/>在线评判模型 · API 密钥"]:::api
+  end
+
+  WRITER ~~~ REVIEWER ~~~ WORKER ~~~ VISION ~~~ JUDGE
+  CC ~~~ CX
+  AN ~~~ OA ~~~ JEV
+  ROLES -- "默认；额度用完的后端暂时跳过，下一个接替" --> CLI
+  ROLES -. "或者" .-> HTTP
+```
+
+**用 Codex，还是用 OpenAI 的 API 密钥？** 两条路都能用到 OpenAI 的模型，但走法不一样：
+
+| | `codex` 后端 | `openai` 类型后端 |
 |---|---|---|
-| 编写（writer） | 编译和修补 wiki | Claude Code，用它最强的模型 |
-| 审校（reviewer） | 把每句话和来源逐句对照 | Codex，让另一家的模型来审 |
-| 杂活（worker） | 准入、分类、收件箱分拣、使用复盘 | Claude Code |
-| 看画面（vision） | 根据视频画面写笔记 | Codex 或 Claude Code |
-| 评判（judge） | 大量小的是非判断（自查、重排） | 小模型，或 Jev |
+| 谁在干活 | Codex 命令行自己当 Agent 干活 | MemexOS 通过 HTTP 调用 Chat Completions 接口，Agent 循环和受沙箱限制的文件工具由 MemexOS 自己跑 |
+| 怎么登录 | 用 Codex 已经登录的账号：ChatGPT 订阅（不需要 API 密钥），或 OpenAI API 密钥 | API 密钥（`api_key_env`）；本地服务不需要 |
+| 怎么计费 | 计入你的 ChatGPT 套餐额度，或按你的 API 用量 | 按 token 向服务商付费；本地模型不花钱 |
+| 能用哪些模型 | Codex 提供的模型 | 任何提供这种接口的服务：OpenAI、DeepSeek、Gemini、OpenRouter、通义千问、Kimi……，或者你电脑上的 Ollama、LM Studio、vLLM |
+| 什么时候用 | 你已经有 ChatGPT 或 Codex | 你手里有某家服务的 API 密钥，或者想用本地模型 |
 
-可以用的后端：
+Anthropic 那边同理：`claude-code` 后端用你 Claude Code 的登录（Claude 订阅就行），`anthropic` 后端用 API 密钥。
 
-- **Claude Code** 和 **Codex** 的命令行：用它们已经登录的账号（订阅或 API 密钥都行），不需要额外配置。
+HTTP 类后端的配置：
+
 - **Anthropic API**：`memex secret set ANTHROPIC_API_KEY`（密钥存进系统钥匙串，不写进任何文件）。
 - **任何兼容 OpenAI 接口的服务**，在线的或本地的都行，名字随便起：
 
@@ -141,7 +241,6 @@ memex schedule install                 # 每晚采集、每小时编译、定时
   worker = ["local", "claude-code"]
   ```
 
-  这类后端由 MemexOS 自己驱动 Agent 循环，给模型提供受沙箱限制的文件工具，所以任何支持工具调用的模型都能用。
   小的本地模型适合杂活和评判；编写和审校需要强模型。
 - **Jev**，用于评判角色（可选，在线服务，返回校准过的概率）：`memex secret set JEV_API_KEY`，然后设
   `[judge] backend = "jev"`。启用后，被评判的句子会发给这个服务。

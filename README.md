@@ -38,6 +38,68 @@ learn is lost when a conversation ends.
 | ![Usage: questions agents asked, the share that helped, the pages they read](docs/images/console-usage.jpg) | ![Quality and cost: first-time review pass rate, why reviews fail, cost per day by role](docs/images/console-quality.jpg) |
 | **Does the knowledge help?** Measured from real agent sessions. | **Can it be trusted, and what does it cost?** |
 
+## How it works
+
+![Sources flow through intake into raw/, are compiled in a staging copy through write, gate 1, self-check and gate 2, published to the wiki, and searched by your agents; usage feedback flows back](docs/images/architecture.jpg)
+
+Every step that needs judgment runs on a model **role**; everything else is a program. Here is the path a source
+takes, with the role at each step in bold (which model fills each role is up to you, see [Models](#models)):
+
+```mermaid
+flowchart TB
+  classDef model fill:#1d3a7a,stroke:#6f9bff,color:#eef2f7
+  classDef prog fill:#1b2333,stroke:#7b8697,color:#eef2f7
+  classDef store fill:#2a2418,stroke:#e7c792,color:#f5e9d3
+  classDef human fill:#3a2f16,stroke:#e7c792,color:#f5e9d3
+
+  subgraph COLLECT["1 · Collect, every night"]
+    direction LR
+    SRC["Sources<br/>YouTube · Bilibili · X · RSS<br/>web pages · agent sessions"]:::prog
+    ADM["Admission<br/>keep or drop<br/><b>worker</b>"]:::model
+    CAP["Capture<br/>fetch · subtitles<br/>whisper.cpp (local)"]:::prog
+    VIS["Visual notes<br/>for thin transcripts<br/><b>vision</b>"]:::model
+    SRC --> ADM --> CAP --> VIS
+  end
+
+  RAW[("raw/ · sources, never edited")]:::store
+
+  subgraph SORT["2 · Classify"]
+    direction LR
+    SCR["Category screen<br/><b>judge</b>"]:::model
+    CLS["Domain · evidence · type<br/><b>worker</b>"]:::model
+    SCR --> CLS
+  end
+
+  subgraph COMPILE["3 · Compile in a staging copy (a git worktree)"]
+    direction LR
+    WR["Write pages<br/><b>writer</b>"]:::model
+    G1{"Gate 1<br/>program checks"}:::prog
+    SC["Self-check<br/>each sentence vs source<br/><b>judge</b>"]:::model
+    G2{"Gate 2<br/>independent review<br/><b>reviewer</b>"}:::model
+    WR --> G1 -- "passes" --> SC --> G2
+    G1 -- "fails: rework" --> WR
+    SC -- "unsupported: rework" --> WR
+    G2 -- "problems: rework" --> WR
+  end
+
+  subgraph PUBLISH["4 · Publish"]
+    direction LR
+    PUB["Merge<br/>one git commit"]:::prog
+    IDX["Reindex<br/>full-text + qmd<br/>(local models)"]:::prog
+    WIKI[("wiki/ · what agents search")]:::store
+    PUB --> IDX --> WIKI
+  end
+
+  HOLD["Held back after N rounds<br/>→ your inbox"]:::human
+
+  COLLECT --> RAW --> SORT --> COMPILE
+  G2 -- "passes" --> PUB
+  G2 -. "still failing" .-> HOLD
+```
+
+Nothing reaches `wiki/` without passing both gates. Gate 1 is code, not a model; gate 2 is a different model family
+from the writer, so the writer's blind spots are not reviewed by the same blind spots.
+
 ## Where the idea comes from
 
 MemexOS starts from Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
@@ -118,21 +180,60 @@ knowledge base has nothing.
 
 ## Models
 
-Work is split into roles, and each role tries a list of backends in order; when one runs out of quota the next takes
-over. `memex setup` detects what you have and proposes a split; `memex doctor` shows it.
+Work is split into roles. Each role has a list of backends and uses the first one that is available; when one runs out
+of quota, the next takes over for a while. `memex setup` detects what you have and proposes the lists; `memex doctor`
+shows them.
 
-| Role | Does | Typical choice |
+```mermaid
+flowchart TB
+  classDef role fill:#1d3a7a,stroke:#6f9bff,color:#eef2f7
+  classDef cli fill:#1b2333,stroke:#b9c3d1,color:#eef2f7
+  classDef api fill:#2a2418,stroke:#e7c792,color:#f5e9d3
+
+  subgraph ROLES["Roles · each tries its list from left to right · [models]"]
+    direction LR
+    WRITER["<b>writer</b><br/>write · rework · fix<br/>claude-code"]:::role
+    REVIEWER["<b>reviewer</b><br/>gate 2 · eval questions<br/>codex → claude-code"]:::role
+    WORKER["<b>worker</b><br/>admission · classify<br/>inbox · usage review<br/>claude-code"]:::role
+    VISION["<b>vision</b><br/>video frames<br/>codex → claude-code"]:::role
+    JUDGE["<b>judge</b><br/>self-check · screening<br/>claude-code:sonnet → codex"]:::role
+  end
+
+  subgraph CLI["Command lines you are already logged in to · no API key needed"]
+    direction LR
+    CC["<b>claude-code</b> · Claude Code CLI<br/>Claude subscription or Anthropic key"]:::cli
+    CX["<b>codex</b> · Codex CLI<br/>ChatGPT subscription or OpenAI key"]:::cli
+  end
+
+  subgraph HTTP["HTTP APIs called by MemexOS itself · optional, add to any role's list"]
+    direction LR
+    AN["<b>anthropic</b><br/>Anthropic API key"]:::api
+    OA["<b>openai</b> type, any name<br/>OpenAI · DeepSeek · Gemini · OpenRouter<br/>or local Ollama · LM Studio · vLLM"]:::api
+    JEV["<b>Jev</b><br/>hosted judge · API key"]:::api
+  end
+
+  WRITER ~~~ REVIEWER ~~~ WORKER ~~~ VISION ~~~ JUDGE
+  CC ~~~ CX
+  AN ~~~ OA ~~~ JEV
+  ROLES -- "defaults; a backend out of quota is skipped for a while" --> CLI
+  ROLES -. "or" .-> HTTP
+```
+
+**Codex or an OpenAI API key?** Both can reach OpenAI's models, in different ways:
+
+| | `codex` backend | `openai`-type backend |
 |---|---|---|
-| writer | compiles and repairs the wiki | Claude Code, with its strongest model |
-| reviewer | checks every sentence against its source | Codex, so a different model family reviews |
-| worker | admission, sorting, inbox triage, usage review | Claude Code |
-| vision | notes from video frames | Codex or Claude Code |
-| judge | many small yes/no questions (self-check, reranking) | a small model, or Jev |
+| What runs | the Codex command line, which does the agent work itself | MemexOS calls a Chat Completions API over HTTP and runs the agent loop and its sandboxed file tools itself |
+| Login | whatever Codex is logged in with: a ChatGPT subscription (no API key) or an OpenAI API key | an API key (`api_key_env`), or nothing for a local server |
+| Billing | counts against your ChatGPT plan, or your API usage | per token with the provider; free for a local model |
+| Models | the models Codex offers | any provider with that API: OpenAI, DeepSeek, Gemini, OpenRouter, Qwen, Kimi…, or Ollama, LM Studio, vLLM on your machine |
+| Use it when | you have ChatGPT or Codex already | you have an API key from some provider, or want a local model |
 
-Backends:
+The same split holds for Anthropic: the `claude-code` backend uses your Claude Code login (a Claude subscription
+works), the `anthropic` backend uses an API key.
 
-- **Claude Code** and **Codex** command lines, using whatever they are logged in with (a subscription or an API key).
-  Nothing to configure.
+Setting up the HTTP backends:
+
 - **Anthropic API**: `memex secret set ANTHROPIC_API_KEY` (stored in the system keychain, never in a file).
 - **Any OpenAI-compatible API**, hosted or local, under any name:
 
@@ -148,8 +249,7 @@ Backends:
   worker = ["local", "claude-code"]
   ```
 
-  MemexOS runs the agent loop itself with sandboxed file tools, so any model with tool calling works. Small local
-  models are fine for the worker and judge roles; writing and reviewing need a strong model.
+  Small local models are fine for the worker and judge roles; writing and reviewing need a strong model.
 - **Jev** for the judge role (optional, hosted, returns calibrated probabilities): `memex secret set JEV_API_KEY`, then
   `[judge] backend = "jev"`. It sends the sentences being judged to that service.
 

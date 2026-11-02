@@ -4,14 +4,60 @@ MemexOS keeps a knowledge base that agents write and agents read. Sources come i
 a wiki, two checks stand between a draft and publication, and any agent can search the result. A person decides what
 matters and answers the questions the agents cannot settle; everything else runs unattended.
 
-```
-            capture                  compile                      check                       read
- links ─┐                                                                              ┌─ memex search / get
- videos ├─► raw/ ──► classify ──► writer agent ──► gate 1 ──► self-check ──► gate 2 ──► publish ──► wiki/ ─┤   (any agent)
- sessions│  (immutable)  (catalog)   in a staging     (program   (a judge     (another      merge,     └─ console
- feeds ─┘                            worktree         checks)    model)      model)        reindex
-                                         ▲                                     │
-                                         └──── rework with the problems ◄──────┘     held back after N rounds → inbox
+![Overview: sources, intake, raw/, compile with two gates, publish, wiki, agents, feedback](images/architecture.jpg)
+
+The write path, with the model **role** that does each step (the others are programs):
+
+```mermaid
+flowchart TB
+  classDef model fill:#1d3a7a,stroke:#6f9bff,color:#eef2f7
+  classDef prog fill:#1b2333,stroke:#7b8697,color:#eef2f7
+  classDef store fill:#2a2418,stroke:#e7c792,color:#f5e9d3
+  classDef human fill:#3a2f16,stroke:#e7c792,color:#f5e9d3
+
+  subgraph COLLECT["1 · Collect, every night"]
+    direction LR
+    SRC["Sources<br/>YouTube · Bilibili · X · RSS<br/>web pages · agent sessions"]:::prog
+    ADM["Admission<br/>keep or drop<br/><b>worker</b>"]:::model
+    CAP["Capture<br/>fetch · subtitles<br/>whisper.cpp (local)"]:::prog
+    VIS["Visual notes<br/>for thin transcripts<br/><b>vision</b>"]:::model
+    SRC --> ADM --> CAP --> VIS
+  end
+
+  RAW[("raw/ · sources, never edited")]:::store
+
+  subgraph SORT["2 · Classify"]
+    direction LR
+    SCR["Category screen<br/><b>judge</b>"]:::model
+    CLS["Domain · evidence · type<br/><b>worker</b>"]:::model
+    SCR --> CLS
+  end
+
+  subgraph COMPILE["3 · Compile in a staging copy (a git worktree)"]
+    direction LR
+    WR["Write pages<br/><b>writer</b>"]:::model
+    G1{"Gate 1<br/>program checks"}:::prog
+    SC["Self-check<br/>each sentence vs source<br/><b>judge</b>"]:::model
+    G2{"Gate 2<br/>independent review<br/><b>reviewer</b>"}:::model
+    WR --> G1 -- "passes" --> SC --> G2
+    G1 -- "fails: rework" --> WR
+    SC -- "unsupported: rework" --> WR
+    G2 -- "problems: rework" --> WR
+  end
+
+  subgraph PUBLISH["4 · Publish"]
+    direction LR
+    PUB["Merge<br/>one git commit"]:::prog
+    IDX["Reindex<br/>full-text + qmd<br/>(local models)"]:::prog
+    WIKI[("wiki/ · what agents search")]:::store
+    PUB --> IDX --> WIKI
+  end
+
+  HOLD["Held back after N rounds<br/>→ your inbox"]:::human
+
+  COLLECT --> RAW --> SORT --> COMPILE
+  G2 -- "passes" --> PUB
+  G2 -. "still failing" .-> HOLD
 ```
 
 ## The vault
@@ -118,6 +164,32 @@ of human-readable logs afterwards: the code that does the work writes the event 
 module (`memexos.events`). `memex status`, the console's activity feed, run timelines and spending are all built from
 these events.
 
+```mermaid
+flowchart LR
+  classDef w fill:#1d3a7a,stroke:#6f9bff,color:#eef2f7
+  classDef s fill:#2a2418,stroke:#e7c792,color:#f5e9d3
+  classDef v fill:#1b2333,stroke:#b9c3d1,color:#eef2f7
+
+  subgraph WRITERS["Written as the work happens · memexos.events"]
+    direction TB
+    CMD["every command that works<br/>ingest · intake · classify · visual · inbox<br/>usage · reindex · eval · nightly"]:::w
+    CALL["every model call<br/>role · model · tokens · cost"]:::w
+    READ["every memex search / get"]:::w
+  end
+
+  LOG[("events/YYYY-MM.jsonl<br/>kept 12 months")]:::s
+  TXT["memex.log<br/>one readable line per event<br/>for people, never read back"]:::v
+  VIEWS["memex status<br/>console: timelines · live feed · spending<br/>evaluations"]:::v
+  OWN["Read from their own records instead<br/>pages and history: vault files + git<br/>classification: catalog · review findings: reports<br/>inbox: inbox files · agent usage: session logs"]:::v
+
+  CMD --> LOG
+  CALL --> LOG
+  READ --> LOG
+  LOG --> TXT
+  LOG --> VIEWS
+  OWN --> VIEWS
+```
+
 Where: `<state>/events/YYYY-MM.jsonl`, one JSON object per line, one file per month. Months older than
 `[state] keep_events_months` (12) are deleted. A plain-text mirror, `<state>/memex.log`, has one readable line per
 event in your language (rendered from the language pack); it is for people and is never read back.
@@ -166,6 +238,62 @@ reads them directly:
 ## Models
 
 Work is assigned to roles, and each role lists backends in order of preference (`[models]`):
+
+```mermaid
+flowchart TB
+  classDef role fill:#1d3a7a,stroke:#6f9bff,color:#eef2f7
+  classDef cli fill:#1b2333,stroke:#b9c3d1,color:#eef2f7
+  classDef api fill:#2a2418,stroke:#e7c792,color:#f5e9d3
+
+  subgraph ROLES["Roles · each tries its list from left to right · [models]"]
+    direction LR
+    WRITER["<b>writer</b><br/>write · rework · fix<br/>claude-code"]:::role
+    REVIEWER["<b>reviewer</b><br/>gate 2 · eval questions<br/>codex → claude-code"]:::role
+    WORKER["<b>worker</b><br/>admission · classify<br/>inbox · usage review<br/>claude-code"]:::role
+    VISION["<b>vision</b><br/>video frames<br/>codex → claude-code"]:::role
+    JUDGE["<b>judge</b><br/>self-check · screening<br/>claude-code:sonnet → codex"]:::role
+  end
+
+  subgraph CLI["Command lines you are already logged in to · no API key needed"]
+    direction LR
+    CC["<b>claude-code</b> · Claude Code CLI<br/>Claude subscription or Anthropic key"]:::cli
+    CX["<b>codex</b> · Codex CLI<br/>ChatGPT subscription or OpenAI key"]:::cli
+  end
+
+  subgraph HTTP["HTTP APIs called by MemexOS itself · optional, add to any role's list"]
+    direction LR
+    AN["<b>anthropic</b><br/>Anthropic API key"]:::api
+    OA["<b>openai</b> type, any name<br/>OpenAI · DeepSeek · Gemini · OpenRouter<br/>or local Ollama · LM Studio · vLLM"]:::api
+    JEV["<b>Jev</b><br/>hosted judge · API key"]:::api
+  end
+
+  WRITER ~~~ REVIEWER ~~~ WORKER ~~~ VISION ~~~ JUDGE
+  CC ~~~ CX
+  AN ~~~ OA ~~~ JEV
+  ROLES -- "defaults; a backend out of quota is skipped for a while" --> CLI
+  ROLES -. "or" .-> HTTP
+```
+
+Every model call in the system, by step:
+
+| Step | Role | Mode | Default list |
+|---|---|---|---|
+| admission (intake) | worker | agent: reads the candidates, may open pages | claude-code |
+| visual notes | vision | structured: sampled video frames in, notes out | codex → claude-code |
+| category screen | judge | many small multiple-choice questions | claude-code:sonnet → codex (or Jev) |
+| classification | worker | structured | claude-code |
+| write, rework, fix, lint, apply inbox decisions | writer | agent in the staging worktree, write access only to `wiki/`, `inbox/`, `index.md`, `log.md` | claude-code |
+| self-check | judge | one yes/no question per new sentence | claude-code:sonnet → codex (or Jev) |
+| gate 2 | reviewer | structured, read-only | codex → claude-code |
+| inbox triage, dedupe | worker | structured | claude-code |
+| inbox impact ranking | judge | multiple choice | claude-code:sonnet → codex (or Jev) |
+| web research, local checks for inbox items | worker | agent: web on, or read-only on named folders | claude-code |
+| usage review, verifying reported problems | worker | structured | claude-code |
+| evaluation questions and judging | `[evals] role` (reviewer) | structured | codex → claude-code |
+| reranking search results | none by default (qmd's local reranker); judge if `search.rerank = "llm"` | | |
+
+Programs, no model: collecting, capture (fetching, subtitles, local whisper.cpp transcription), gate 1, publishing,
+indexing (SQLite full-text and qmd's local embedding and reranking models), scheduling, the console.
 
 | Role | Does | Default |
 |---|---|---|
