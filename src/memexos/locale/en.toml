@@ -33,6 +33,7 @@ jev_402 = "Jev credit is used up"
 jev_403 = "Jev refused access"
 
 [doctor]
+protected = "the knowledge base is inside {folder}, which macOS keeps scheduled jobs out of"
 title = "MemexOS doctor"
 ok = "ok"
 missing = "missing"
@@ -71,6 +72,7 @@ search_qmd_building = "qmd is building the vector index now; search uses the bui
 search_qmd_unindexed = "qmd is installed; this knowledge base is not embedded yet"
 
 [doctor.hint]
+protected = "move it out of that folder (for example to ~/memex), or grant access in System Settings → Privacy & Security and use memex schedule install --force"
 git = "https://git-scm.com/downloads"
 claude = "install with curl -fsSL https://claude.ai/install.sh | bash (or npm install -g @anthropic-ai/claude-code), then run `claude` once and log in"
 codex = "install with npm install -g @openai/codex, then run `codex login`"
@@ -726,6 +728,7 @@ search = "search"
 console = "console"
 
 [schedule]
+protected = """{vault} is inside {folder}. macOS keeps background jobs out of that folder, so every scheduled job would fail with "Operation not permitted" without telling anyone.\nMove the knowledge base out (for example to ~/memex) and set its path again with memex setup, or give the program the jobs run (see memex schedule show) access under System Settings → Privacy & Security, then run memex schedule install --force."""
 backend = "scheduler: {backend}"
 none = "No scheduler found (launchd, systemd user units or cron). Run the jobs another way, e.g. memex nightly from your own scheduler."
 

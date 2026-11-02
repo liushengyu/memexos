@@ -33,6 +33,7 @@ jev_402 = "Jev 的额度用完了"
 jev_403 = "Jev 拒绝访问"
 
 [doctor]
+protected = "知识库在 {folder} 里，macOS 不让定时任务读这个文件夹"
 title = "MemexOS 体检"
 ok = "可用"
 missing = "缺少"
@@ -71,6 +72,7 @@ search_qmd_building = "qmd 正在建向量索引；建好之前检索用内置�
 search_qmd_unindexed = "qmd 已安装，这个知识库还没建向量索引"
 
 [doctor.hint]
+protected = "把知识库挪出这个文件夹（比如挪到 ~/memex），或在“系统设置 → 隐私与安全性”里开放权限后用 memex schedule install --force"
 git = "https://git-scm.com/downloads"
 claude = "安装：curl -fsSL https://claude.ai/install.sh | bash（或 npm install -g @anthropic-ai/claude-code），然后运行一次 `claude` 并登录"
 codex = "安装：npm install -g @openai/codex，然后运行 `codex login`"
@@ -723,6 +725,7 @@ search = "检索"
 console = "控制台"
 
 [schedule]
+protected = """{vault} 在 {folder} 里。macOS 不让后台任务读这个文件夹，所有定时任务都会以“Operation not permitted”失败，而且没有任何提示。\n请把知识库挪出来（比如挪到 ~/memex）并用 memex setup 重新设好路径；或者在“系统设置 → 隐私与安全性”里给定时任务运行的程序（见 memex schedule show）开放权限，再运行 memex schedule install --force。"""
 backend = "定时任务：{backend}"
 none = "没找到可用的定时工具（launchd、systemd 用户单元或 cron）。请用别的方式定时运行，例如让你自己的调度器每天跑 memex nightly。"
 
