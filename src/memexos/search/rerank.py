@@ -103,10 +103,13 @@ def _note_speed(cfg, timing: dict, n: int) -> None:
 
 def budget_k(cfg, k: int) -> int:
     """How many candidates the local reranker can score within [search] rerank_budget seconds on this machine, at
-    least 5: on a slow machine the top few are still put in order, and search stays quick."""
+    least 5: on a slow machine the top few are still put in order, and search stays quick. The first search on a
+    machine scores 8 and measures."""
     per = _speed(cfg)
     budget = float(cfg.get("search.rerank_budget") or 6)
-    return k if not per else max(5, min(k, int(budget / per)))
+    if not per:
+        return min(k, 8)            # not measured yet: a modest first try, so a slow machine does not wait long once
+    return max(5, min(k, int(budget / per)))
 
 
 def rerank(cfg, query: str, hits: list[dict], degraded: list, k: int | None = None) -> list[dict]:

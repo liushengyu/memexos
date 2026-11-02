@@ -191,7 +191,7 @@ def test_excerpt_is_where_the_keywords_meet():
 def test_reranker_fits_the_time_budget(home):
     from memexos.search import rerank
     cfg = config.load(home / "v")
-    assert rerank.budget_k(cfg, 20) == 20                         # not measured yet: all candidates
+    assert rerank.budget_k(cfg, 20) == 8                          # not measured yet: a modest first try
     rerank._note_speed(cfg, {"rank_ms": 16000, "load_ms": 3000}, 20)  # a CPU-only machine: 0.8 s per page
     assert rerank.budget_k(cfg, 20) == 7
     (cfg.paths.state / rerank.SPEED_FILE).write_text('{"per_doc": 0.04}')
