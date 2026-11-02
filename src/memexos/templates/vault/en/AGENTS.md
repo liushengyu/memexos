@@ -167,10 +167,12 @@ the batch's classifications in your prompt: domain (primary + secondary), conten
 
 ### 2.2 Query (answer a question)
 
-1. Find pages with `memex search "<question>" --kw "<keywords>"` (`memex help` explains the options), or read `index.md`
+1. Find pages with `memex search "<question>" --kw "<keywords>"` (`memex help` explains the options). `index.md` lists
+   every page; it is for browsing a small knowledge base, not for searching a large one
 2. Read the relevant pages with `memex get <page>`
 3. Answers **cite** wiki pages (which cite `raw/`); check the source classification before citing and word it per §2.1.4
-4. Offer to file a valuable answer back as a new page
+4. A conclusion worth keeping came out of the answer: offer the person a session snapshot (`memex help snapshot`);
+   wiki pages change only through compiling
 
 ### 2.3 Lint (health check)
 

@@ -6,11 +6,12 @@ When to use it
 
 Search
   memex search "<question>" --kw "<2–5 keywords>"
-      Finds pages and returns their kind, classification and an excerpt. Pick the keywords yourself (names, terms):
-      that works better than the question alone. Nothing found: try other keywords or other wording.
+      Finds pages and returns their kind, classification, which keywords each contains, and an excerpt. Pick the
+      keywords yourself (names, terms) in the language the pages are written in ($language): that works better than
+      the question alone. Nothing found: try other keywords or other wording.
   memex get <page name or path>
-      One page in full. Pages live in wiki/: topics (overviews, start there), concepts, entities (people, tools),
-      sources (one summary per source).
+      One page in full (a name as search shows it, a [[link]] or a path). Pages live in wiki/: topics (overviews, start
+      there), concepts, entities (people, tools), sources (one summary per source).
   memex catalog list --domain <domain> --evidence <evidence>
       Filter sources by domain and evidence strength (memex catalog stats lists the domains).
   memex feedback <page> --kind incorrect|outdated|missing --why "<reason>"

@@ -83,10 +83,11 @@ def test_cli_search_get_reindex(vault, monkeypatch, capsys):
     out = json.loads(capsys.readouterr().out)
     paths = [h["path"] for h in out["hits"]]
     assert "wiki/concepts/Reciprocal rank fusion.md" in paths
-    raw = next(h for h in out["hits"] if h["path"].startswith("raw/"))
-    assert raw["compiled_page"] == "RRF paper"
+    assert not [h for h in out["hits"] if h["path"].startswith("raw/")]      # its compiled page is listed instead
     src = next(h for h in out["hits"] if h["path"] == "wiki/sources/RRF paper.md")
-    assert "academic research" in src["classification"]
+    assert "academic research" in src["classification"] and src["sources"] == 1
+    rrf = next(h for h in out["hits"] if h["path"] == "wiki/concepts/Reciprocal rank fusion.md")
+    assert rrf["matched"] == ["rank", "fusion"] or "rank" in rrf["matched"]
     assert main(["get", "reciprocal rank fusion", "--lines", "3"]) == 0
     assert "Reciprocal rank fusion" in capsys.readouterr().out
 
@@ -152,3 +153,36 @@ def test_qmd_download_route(home, monkeypatch):
     cfg.data["fetch"]["proxy_cacert"] = "~/ca.pem"
     env = qmd._env(cfg)
     assert env["https_proxy"] == "http://other.example:3128" and env["NODE_EXTRA_CA_CERTS"] == os.path.expanduser("~/ca.pem")
+
+
+def test_a_raw_file_shows_its_page_unless_the_page_is_listed():
+    from memexos.search.cli import dedupe
+    hits = [{"path": "raw/a.md", "compiled_page": "A"}, {"path": "wiki/sources/A.md"}, {"path": "raw/b.md", "compiled_page": "B"}]
+    assert [h["path"] for h in dedupe(hits)] == ["wiki/sources/A.md", "raw/b.md"]
+
+
+def test_get_accepts_what_agents_paste(vault, monkeypatch, capsys):
+    monkeypatch.setenv("MEMEX_VAULT", str(vault))
+    for form in ("[[Reciprocal rank fusion]]", "[[Reciprocal rank fusion|RRF]]", "`reciprocal rank fusion`",
+                 "wiki/concepts/Reciprocal rank fusion", "Reciprocal rank fusion  (wiki/concepts/Reciprocal rank fusion.md)",
+                 "\"Reciprocal rank fusion\"", "[[Reciprocal rank fusion#Sources]]"):
+        assert main(["get", form, "--lines", "1"]) == 0, form
+        assert "Reciprocal rank fusion" in capsys.readouterr().out
+    assert main(["get", "Reciprocal rank fussion"]) == 1
+    assert "Reciprocal rank fusion" in capsys.readouterr().err                # suggested
+    assert main(["get", "../../etc/passwd"]) == 1
+
+
+def test_feedback_needs_a_page_that_exists(vault, monkeypatch, capsys):
+    monkeypatch.setenv("MEMEX_VAULT", str(vault))
+    assert main(["feedback", "Reciprocal rank fussion", "--kind", "incorrect", "--why", "x"]) == 1
+    assert "Reciprocal rank fusion" in capsys.readouterr().err
+    assert main(["feedback", "[[Reciprocal rank fusion]]", "--kind", "outdated", "--why", "x"]) == 0
+    assert "wiki/concepts/Reciprocal rank fusion.md" in capsys.readouterr().out
+    assert main(["feedback", "Vector databases", "--kind", "missing", "--why", "no page about them"]) == 0
+
+
+def test_excerpt_is_where_the_keywords_meet():
+    body = "Unrelated opening about rank. " * 30 + "Reciprocal rank fusion sums 1/(k + rank) over lists. " + "tail " * 100
+    snip = T.snippet(body, ["fusion", "rank", "how are lists combined"])
+    assert "Reciprocal rank fusion" in snip

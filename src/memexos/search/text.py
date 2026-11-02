@@ -86,16 +86,32 @@ def keywords(question: str, lang: str | None = None, limit: int = 6) -> list[str
 
 
 def snippet(text: str, terms: list[str], width: int = 160) -> str:
-    """The passage around the first occurrence of any term (case-insensitive), on one line."""
+    """The passage, on one line, where the most different terms occur close together (case-insensitive); a term
+    found once anywhere beats a passage with none."""
     low = text.lower()
-    best = None
-    for t in terms:
-        i = low.find(t.lower())
-        if i >= 0 and (best is None or i < best):
-            best = i
-    if best is None:
-        best = 0
-    start = max(0, best - width // 3)
+    terms = [t.lower() for t in dict.fromkeys(terms) if t and t.strip()]
+    hits = []                                   # (position, term index)
+    for k, t in enumerate(terms):
+        i = low.find(t)
+        n = 0
+        while i >= 0 and n < 50:
+            hits.append((i, k))
+            i = low.find(t, i + 1)
+            n += 1
+    best, best_score = 0, -1
+    for pos, _ in hits:
+        start = max(0, pos - width // 3)
+        seen = {k for q, k in hits if start <= q < start + width - 10}
+        score = len(seen) * 1000 - pos // 1000        # more distinct terms first, then earlier in the page
+        if score > best_score:
+            best, best_score = pos, score
+    start = max(0, best - width // 3) if hits else 0
     s = text[start:start + width]
     s = re.sub(r"\s+", " ", s).strip()
     return ("…" if start > 0 else "") + s + ("…" if start + width < len(text) else "")
+
+
+def matched(text: str, terms: list[str]) -> list[str]:
+    """Which of the terms the text contains (case-insensitive), in the order given."""
+    low = text.lower()
+    return [t for t in dict.fromkeys(terms) if t and t.lower() in low]

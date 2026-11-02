@@ -6,10 +6,11 @@ memex：一个知识库（$vault）的命令行。任何 Agent 都用它查库�
 
 查库
   memex search "<问题>" --kw "<2~5 个关键词>"
-      找相关页面，返回页面类型、来源分类和摘录。关键词由你从问题里提炼（专有名词、术语），比只给问句准。
-      第一次没找到：换一组关键词或换个说法再搜。
+      找相关页面，返回页面类型、来源分类、每页包含哪些关键词和摘录。关键词由你从问题里提炼（专有名词、术语），
+      用页面所用的语言（$language），比只给问句准。第一次没找到：换一组关键词或换个说法再搜。
   memex get <页面名或路径>
-      看一页全文。页面在 wiki/ 下：topics 主题综述（先看）、concepts 概念、entities 人和工具、sources 单个来源的摘要。
+      看一页全文（检索结果里的页面名、[[链接]] 或路径都行）。页面在 wiki/ 下：topics 主题综述（先看）、concepts 概念、
+      entities 人和工具、sources 单个来源的摘要。
   memex catalog list --domain <领域> --evidence <证据强度>
       按领域、证据强度筛选来源。先用 memex catalog stats 看有哪些领域。
   memex feedback <页面> --kind incorrect|outdated|missing --why "<理由>"
