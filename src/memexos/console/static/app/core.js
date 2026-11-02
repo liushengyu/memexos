@@ -195,6 +195,7 @@ function md(src) {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, a, b) => /^https?:/.test(b) ? `<a href="${b}" target="_blank" rel="noopener noreferrer">${a}</a>` :
       /^(wiki|raw|inbox)\//.test(b) ? `<span class="link" data-path="${b}">${a}</span>` : a)
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[^\w*])\*([^*\s][^*]*?)\*(?=[^\w*]|$)/g, "$1<i>$2</i>")
     .replace(/(^|[^`\w"])(raw\/[^\s<`，。；）)"]+?\.md)/g, '$1<span class="link" data-path="$2">$2</span>');
   while (i < lines.length) {
     const l = lines[i];
@@ -204,7 +205,10 @@ function md(src) {
       const cells = r => r.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
       out += "<table>" + rows.filter(r => !/^\|[\s:|-]+\|$/.test(r)).map((r, k) => "<tr>" + cells(r).map(c => k === 0 ? `<th>${inline(c)}</th>` : `<td>${inline(c)}</td>`).join("") + "</tr>").join("") + "</table>"; continue; }
     if (/^\s*([-*]|\d+\.)\s/.test(l)) { let b = ""; while (i < lines.length && /^\s*([-*]|\d+\.)\s/.test(lines[i])) {
-        const ind = lines[i].match(/^\s*/)[0].length; b += `<li style="margin-left:${ind * 8}px">${inline(lines[i].replace(/^\s*([-*]|\d+\.)\s/, ""))}</li>`; i++; }
+        const ind = lines[i].match(/^\s*/)[0].length; let text = lines[i].replace(/^\s*([-*]|\d+\.)\s/, ""); i++;
+        // a wrapped item continues on indented lines that are not items themselves
+        while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !/^\s*([-*]|\d+\.)\s/.test(lines[i])) text += " " + lines[i++].trim();
+        b += `<li style="margin-left:${ind * 8}px">${inline(text)}</li>`; }
       out += `<ul>${b}</ul>`; continue; }
     if (/^>/.test(l)) { let b = ""; while (i < lines.length && /^>/.test(lines[i])) b += inline(lines[i++].replace(/^>\s?/, "")) + "<br>"; out += `<blockquote>${b}</blockquote>`; continue; }
     if (!l.trim()) { i++; continue; }
