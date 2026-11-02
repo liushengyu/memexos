@@ -429,6 +429,7 @@ class Data:
         return {
             "time": time.strftime("%H:%M:%S"), "date": time.strftime("%Y-%m-%d"), "state": snap["state"], "state_key": snap["state_key"],
             "paused": snap["paused"], "alerts": snap["alerts"], "warn": snap["warn"], "doing": snap["doing"], "done": snap["done"],
+            "logins": self._logins(),
             "running": [{k: u[k] for k in ("id", "job", "t0", "active")} for u in units if u["status"] == "running"],
             "stages": [{"id": s, "active": s in act, "jobs": act.get(s, [])} for s in RING],
             "metrics": {"wiki": len(self.pages()), "raw": len(self.raw_files()), "pending": len(snap["pending"]),
@@ -444,6 +445,14 @@ class Data:
             "inbox": snap.get("inbox") or {},
             "schedule": {"intake_at": self.cfg.get("schedule.intake_at"), "lint_at": self.cfg.get("schedule.lint_at")},
         }
+
+    def _logins(self) -> list[dict]:
+        """Collector sites waiting for the person to log in (the console offers to open the login window)."""
+        from memexos.capture import cookies
+        try:
+            return [{"id": x, "name": cookies.SITES[x].name} for x in cookies.needs_login(self.cfg)]
+        except Exception:  # noqa: BLE001 — never let this break the live view
+            return []
 
     def _verdicts(self) -> dict[str, str]:
         p = self.cfg.paths.state / "usage" / "judgments.jsonl"

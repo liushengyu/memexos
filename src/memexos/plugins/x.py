@@ -1,8 +1,8 @@
 """Plugin: X (Twitter). Bookmarks and likes as an intake channel; tweets (with the author's thread and long-form
 articles) for `memex add-url`.
 
-Needs twitter-cli (https://github.com/jackwener/twitter-cli, Apache-2.0) and a logged-in browser
-(plugins.x.browser). Bookmarks are a strong "keep this" signal; likes are weaker and are screened harder.
+Needs twitter-cli (https://github.com/jackwener/twitter-cli, Apache-2.0) and your X login (`memex login x`, see
+capture/cookies.py). Bookmarks are a strong "keep this" signal; likes are weaker and are screened harder.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 from memexos import i18n
 from memexos.capture import cookies
 from memexos.capture.fetch import PageUnavailable, proxy_for
-from memexos.util import proxy_env, run, which
+from memexos.util import proxy_env, run, script_python, which
 
 NAME = "x"
 ADMISSION = {
@@ -31,11 +31,11 @@ ADMISSION = {
 def _env(cfg) -> dict:
     env = proxy_env(None, proxy_for(cfg, "https://x.com"))
     cf = cookies.file_for(cfg, "x")
-    if cf:
-        jar = {l.split("\t")[5]: l.split("\t")[6] for l in cf.read_text(errors="ignore").splitlines()
-               if not l.startswith("#") and l.count("\t") >= 6}
-        if jar.get("auth_token") and jar.get("ct0"):
-            env.update(TWITTER_AUTH_TOKEN=jar["auth_token"], TWITTER_CT0=jar["ct0"])
+    jar = {c["name"]: c["value"] for c in cookies.read_file(cf)} if cf else {}
+    if not (jar.get("auth_token") and jar.get("ct0")):
+        # without them twitter-cli would go looking in your everyday browsers; MemexOS uses only the login you gave it
+        raise PageUnavailable(i18n.t("x.not_logged_in"))
+    env.update(TWITTER_AUTH_TOKEN=jar["auth_token"], TWITTER_CT0=jar["ct0"])
     return env
 
 
@@ -44,11 +44,17 @@ def twitter(cfg, *args: str):
     if not exe:
         raise PageUnavailable(i18n.t("x.no_cli"))
     r = run([exe, *args, "--json"], env=_env(cfg), timeout=180)
-    if r.returncode != 0:
-        raise PageUnavailable(f"twitter {' '.join(args[:2])}: {(r.stderr.strip().splitlines() or ['?'])[-1][-200:]}")
-    d = json.loads(r.stdout or "{}")
-    if isinstance(d, dict) and not d.get("ok", True):
-        raise PageUnavailable(f"twitter {' '.join(args[:2])}: {d.get('error')}")
+    try:
+        d = json.loads(r.stdout or "{}")
+    except ValueError:
+        d = None
+    err = d.get("error") if isinstance(d, dict) and not d.get("ok", True) else None
+    if isinstance(err, dict) and err.get("code") == "not_authenticated":
+        cookies.mark_expired(cfg, "x", str(err.get("message") or "")[:200])
+        raise PageUnavailable(i18n.t("x.login_ended"))
+    if r.returncode != 0 or err:
+        why = (err.get("message") if isinstance(err, dict) else err) or (r.stderr.strip().splitlines() or ["?"])[-1]
+        raise PageUnavailable(f"twitter {' '.join(args[:2])}: {str(why)[-200:]}")
     return d.get("data") if isinstance(d, dict) and "data" in d else d
 
 
@@ -63,14 +69,7 @@ def fmt(t: dict) -> str:
 
 
 def _cli_python() -> str | None:
-    exe = which("twitter")
-    if not exe:
-        return None
-    try:
-        first = open(exe, "rb").readline().decode(errors="ignore")
-    except OSError:
-        return None
-    return first[2:].strip().split()[0] if first.startswith("#!") and "python" in first else None
+    return script_python(which("twitter"))
 
 
 def article(cfg, tid: str) -> tuple[str, str] | None:
@@ -156,13 +155,16 @@ def capture(cfg, url: str, title: str, via: str, write) -> Path:
 
 
 def collect(cfg, state: dict, done: set, since_days: float) -> list[list[dict]]:
-    """Bookmarks (and likes, when plugins.x.likes) not seen before, in batches of 20."""
+    """Bookmarks (and likes, when plugins.x.likes) not seen before, in batches of 20. The first run reads only the
+    newest plugins.x.first_run_max of each, not years of history."""
     tweets, kinds = [], {}
+    first = not state.get("_started")
+    n = int(cfg.get("plugins.x.first_run_max") or 50) if first else int(cfg.get("plugins.x.max_per_run") or 300)
     sources = [("bookmarks", f_bookmarks)] + ([("likes", f_likes)] if cfg.get("plugins.x.likes", True) else [])
     errors = []
     for label, fn in sources:
         try:
-            got = json.loads(fn(cfg, [], 300, True) or "[]")
+            got = json.loads(fn(cfg, [], n, True) or "[]")
         except (PageUnavailable, ValueError) as e:
             errors.append(f"{label}: {e}")
             continue
@@ -170,6 +172,8 @@ def collect(cfg, state: dict, done: set, since_days: float) -> list[list[dict]]:
             if t.get("id") not in kinds:
                 tweets.append(t)
             kinds.setdefault(t.get("id"), []).append(label)
+    if len(errors) < len(sources):
+        state["_started"] = True
     items = []
     for t in tweets:
         key = f"x:{t.get('id')}"

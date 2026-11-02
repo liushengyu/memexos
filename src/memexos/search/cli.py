@@ -1,4 +1,4 @@
-"""`memex search`, `memex get`, `memex reindex`."""
+"""`memex search`, `memex get`, `memex reindex`, `memex models`."""
 
 from __future__ import annotations
 
@@ -229,3 +229,23 @@ def _reindex(cfg, a) -> int:
     if (want == "qmd" or (want == "auto" and qmd.command(cfg))) and not lock.coalesced(cfg.paths.locks, "qmd", vectors):
         print(i18n.t("reindex.qmd_busy"))
     return 0
+
+
+def cmd_models(loader, argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="memex models", description=i18n.t("models.help"))
+    ap.add_argument("action", nargs="?", default="status", choices=["status", "pull"])
+    ap.add_argument("--deep", action="store_true", help=i18n.t("models.opt_deep"))
+    a = ap.parse_args(argv)
+    cfg = loader()
+    if not qmd.command(cfg):
+        print(i18n.t("setup.qmd_missing"))
+        return 1
+    if a.action == "pull":
+        print(i18n.t("models.pulling"))
+    r = qmd.models(cfg, a.action if a.action == "pull" else "check", deep=a.deep)
+    for name, path in r["models"].items():
+        label = {"embed": i18n.t("models.default_embed"), "rerank": i18n.t("models.rerank"), "generate": i18n.t("models.generate")}.get(name, name)
+        print(f"{'✓' if path else '·'} {label}: {path or i18n.t('models.missing')}")
+    if not r["ok"]:
+        print(i18n.t("models.not_ok", why=r.get("why") or ""), file=sys.stderr)
+    return 0 if r["ok"] else 1

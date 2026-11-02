@@ -46,7 +46,10 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --extra dev
-      - run: uv run pytest -q
+      - name: tests (the login tests drive the runner's Google Chrome; they must not be skipped here)
+        env:
+          MEMEX_REAL_BROWSER: "1"
+        run: uv run pytest -q
 
   leak-scan:
     name: leak scan
@@ -136,6 +139,10 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           memex --version
           qmd --version
+      - name: an unknown optional part is refused before anything is installed
+        run: |
+          if sh install.sh --yes --with nonsense 2>err.txt; then exit 1; fi
+          grep -q "unknown optional part" err.txt
 
   ci-ok:
     name: ci-ok

@@ -169,26 +169,39 @@ project_roots = ["~/src", "~/projects", "~/code", "~/Documents"]
 [intake.rss]
 feeds_file = ".memex/feeds.txt"
 
+# Where a site's login comes from (login = …):
+#   "memex"  MemexOS's own browser profile: log in once with `memex login <site>` (a window opens); MemexOS then keeps
+#            the login alive by itself, also from scheduled jobs and for agents (`memex cookies refresh`).
+#   "chrome", "firefox", "edge", "brave", "safari", …  copy the login from that everyday browser (needs yt-dlp; on
+#            macOS only from a terminal, scheduled jobs then use the last copy).
+#   ""       no login.
 [plugins.bilibili]
 enabled = false
-browser = "chrome"  # where to export the login cookie from
+login = "memex"
 proxy = "direct"
 
 [plugins.x]
 enabled = false
-browser = "chrome"
+login = "memex"
 proxy = ""
 likes = true
+first_run_max = 50  # the first run reads at most this many bookmarks and likes, not your whole history
+max_per_run = 300
 
 [plugins.youtube]
 # What you save on YouTube: "Liked videos" (LL), "Watch later" (WL), and any playlist ids or URLs you add. The two
-# private lists need a logged-in browser. The browser setting also lets video capture use your login.
+# private lists need your login (memex login youtube), which video capture then uses too.
 enabled = false
-browser = ""        # export a login cookie for YouTube; empty = anonymous
+login = "memex"
 proxy = ""
 playlists = ["LL", "WL"]
 first_run_max = 50  # the first run reads at most this many per list, not your whole history
 max_per_run = 200
+
+# ---------------------------------------------------------------------------
+[browser]
+# The browser MemexOS drives for site logins (Chrome, Chromium, Edge or Brave). Empty = the first one installed.
+command = ""
 
 # ---------------------------------------------------------------------------
 [fetch]

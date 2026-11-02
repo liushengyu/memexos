@@ -135,24 +135,33 @@ flowchart TB
 
 ## 安装
 
-需要 macOS 或 Linux（Windows 请用 WSL）、git 和 curl。其余的由安装脚本装好，每一步都会先问你：
+需要 macOS 或 Linux（Windows 请用 WSL）、git 和 curl。其余的由安装脚本装好：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/liushengyu/memexos/main/install.sh | sh
 ```
 
-它按这个顺序安装：
+**一定会装的**（缺了它们 MemexOS 没法完整工作）：
 
 1. **MemexOS** 本体，用 [uv](https://docs.astral.sh/uv) 安装（uv 会自带合适的 Python）。
-2. **Node.js 22 以上和 [qmd](https://github.com/tobi/qmd)**：qmd 是本地检索引擎（向量检索和重排都在你自己的电脑上
-   运行），然后下载 qmd 用的模型，约 2.2 GB。没有 qmd 也能检索，用的是内置的全文索引。
-3. 可选：**yt-dlp、ffmpeg、whisper.cpp** 和一个语音识别模型（给没有字幕的视频转写），以及 **poppler**（读 PDF）。
-4. 如果你还没有任何模型，它可以帮你装好 Claude Code 或 Codex 的命令行，你登录一下就能用。
-5. `memex setup`：问你几个问题，然后建好你的知识库（愿意的话带上示例内容）。
+2. **Node.js 22 以上和 [qmd](https://github.com/tobi/qmd)**：qmd 是本地检索引擎，向量检索和重排都在你自己的电脑上运行。
+3. **一个已登录的模型命令行**：Claude Code 或 Codex。两个都没有时，它会装上一个，并在浏览器里打开登录页。
+   **不需要 API key**，见[模型怎么配](#模型怎么配)。
+4. **`memex setup`**：问你几个问题，然后建好知识库（愿意的话带上示例内容），并下载检索模型（约 1 GB，只下一次；
+   中文知识库用 Qwen3-Embedding）。
+
+**可选的**，从列表里挑（或者用 `--with a,b,c`）：
+
+| | 多了什么能力 | 会装什么 |
+|---|---|---|
+| `second-cli`（推荐） | 写和审由不同的模型家族来做 | Claude Code / Codex 里的另一个，并登录 |
+| `video` | 视频和播客，没有字幕也行 | yt-dlp、ffmpeg、whisper.cpp、一个语音识别模型（约 550 MB） |
+| `pdf` | PDF | poppler |
+| `social` | 采集你在 X、YouTube、B 站上收藏的内容 | twitter-cli、yt-dlp；如果你没有 Chrome、Chromium、Edge 或 Brave，再装一个只用来登录的浏览器 |
+| `deep-search` | `memex search --mode deep`（查询扩展） | qmd 的查询扩展模型（约 1.3 GB） |
 
 想让 Agent 替你装？把 [docs/install-prompt.md](docs/install-prompt.md) 里的提示词交给 Claude Code 或 Codex。
-手动安装：`uv tool install --with anthropic git+https://github.com/liushengyu/memexos`、`npm install -g @tobilu/qmd`，
-再运行 `memex setup`。任何时候都可以用 `memex doctor` 检查一遍，它会说清缺什么、怎么补。
+`sh install.sh --help` 列出全部选项；可以随时重新运行，已经装好的会跳过。`memex doctor` 检查一遍，说清缺什么、怎么补。
 
 ## 快速开始
 
@@ -190,6 +199,10 @@ memex schedule install                 # 每晚采集、每小时编译、定时
 ```
 
 ## 模型怎么配
+
+**不需要 API key。** MemexOS 的模型工作通过**你已经登录的 Claude Code 或 Codex 命令行**来跑，用的是你的订阅（Claude
+Pro/Max、ChatGPT Plus/Pro）或这些工具本来登录的账号。`memex setup` 会把它们排在最前面。API key（Anthropic、OpenAI、
+DeepSeek 等）和本地模型服务（Ollama、LM Studio、vLLM）是可选的补充，可以加到任何角色里。
 
 工作分成几个角色。每个角色有一串后端，按顺序用第一个可用的；某个后端额度用完，下一个自动接替一段时间。`memex setup`
 会检测你装了什么并给出建议，`memex doctor` 随时显示当前分工。
@@ -279,6 +292,17 @@ MemexOS 本身免费，花钱的是模型调用，而且只有按次付费时才
 
 控制台的「质量与成本」页按天、按角色显示花费；随时可以用 `memex pause` 暂停编译。
 
+## X、YouTube、B 站的登录
+
+采集你在这些网站上收藏的内容需要你的登录。MemexOS 为此**单独保留一个浏览器资料**（不是你日常用的浏览器）：
+`memex login x` 会打开一个窗口停在网站登录页，你登录一次，窗口自己关闭。之后 MemexOS 自己保持登录有效：采集前在这个
+资料里无窗口地打开网站，让网站续期 cookie，再交给采集工具。定时任务和 Agent 都能做这件事（`memex cookies refresh`），
+因为不需要读取你日常浏览器的数据。
+
+网站真的让登录失效时，MemexOS 不会悄悄失败：`memex status` 和控制台会显示出来，并弹一次桌面通知。运行
+`memex login <站点>`（或在控制台的命令面板里点「登录」）会重新打开窗口。没有屏幕的机器上，`memex login x --cookies cookies.txt`
+可以用在别处导出的 cookie 文件，`--from-browser chrome` 可以从日常浏览器复制一次登录。
+
 ## 定时任务
 
 `memex schedule install` 安装当前用户的定时任务（macOS 用 launchd，Linux 用 systemd 用户单元，其他系统用 cron）：
@@ -293,10 +317,10 @@ MemexOS 本身免费，花钱的是模型调用，而且只有按次付费时才
 | 读 | `search`、`get`、`catalog`、`help` |
 | 加资料 | `add-url`、`add-video`、`feedback` |
 | 编译 | `ingest`、`fix`、`correct`、`lint`、`pause`、`resume` |
-| 采集 | `intake`、`sessions`、`cookies`（插件） |
+| 采集 | `intake`、`sessions`、`login`、`cookies`（插件） |
 | 做决定 | `inbox`、`console` |
 | 观察 | `status`、`usage`、`eval` |
-| 设置 | `setup`、`init`、`doctor`、`config`、`secret`、`schedule` |
+| 设置 | `setup`、`init`、`doctor`、`config`、`secret`、`schedule`、`models`、`reindex` |
 
 ## 配置
 
@@ -308,7 +332,9 @@ MemexOS 本身免费，花钱的是模型调用，而且只有按次付费时才
 
 - 发给你配置的模型后端的文本，和这些工具平时的行为一样。
 - 可选服务，只有你开启时才用：抓取难抓网页用的阅读服务、Jev 评判模型。
-- 除此之外没有。控制台只监听 127.0.0.1。需要你登录状态的采集源（X、B 站、YouTube）是插件，默认关闭，你开启才用。
+- 下载：检索模型（只下一次，来自 Hugging Face），以及你采集的网页和视频。
+- 除此之外没有。控制台只监听 127.0.0.1。需要你登录状态的采集源（X、B 站、YouTube）是插件，默认关闭，你开启才用；
+  它们的登录保存在你电脑上 MemexOS 的浏览器资料和 cookie 文件里（只有你本人能读，MemexOS 调用的 Agent 也读不到）。
 
 ## 文档
 

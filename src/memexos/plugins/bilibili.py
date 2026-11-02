@@ -1,6 +1,6 @@
 """Plugin: Bilibili favorites as an intake channel (new videos in your favorite folders since the last run).
 
-Needs a logged-in browser (plugins.bilibili.browser). Admitted videos are captured like any other video
+Needs your Bilibili login (`memex login bilibili`, see capture/cookies.py). Admitted videos are captured like any other video
 (`memex add-video`: subtitles, else local transcription). Bilibili rejects some overseas proxies, so the
 default network route for it is direct (plugins.bilibili.proxy = "direct").
 """
@@ -44,6 +44,11 @@ def collect(cfg, state: dict, done: set, since_days: float) -> list[list[dict]]:
         state["_errors"] = [i18n.t("bilibili.not_logged_in")]
         return []
     cookie = "; ".join(f"{k}={v}" for k, v in jar.items() if (k + v).isascii())
+    nav = _get(cfg, "https://api.bilibili.com/x/web-interface/nav", cookie)
+    if nav.get("code") == -101 or not (nav.get("data") or {}).get("isLogin", True):
+        cookies.mark_expired(cfg, "bilibili", str(nav.get("message") or "not logged in"))
+        state["_errors"] = [i18n.t("bilibili.login_ended")]
+        return []
     folders = (_get(cfg, f"https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid={mid}", cookie).get("data") or {}).get("list") or []
     # The look-back floor is fixed on the first run and never moves earlier, so a folder without new items
     # is not re-read from the start next time.

@@ -122,6 +122,35 @@ def render_frontmatter(fields: dict[str, Any], order: Iterable[str] = ()) -> str
     return "---\n" + "\n".join(lines) + "\n---\n\n"
 
 
+SH_EXEC = re.compile(r"""^'''exec' "?([^"\s]+)"?""")
+
+
+def script_python(exe: str | None) -> str | None:
+    """The Python a console script (yt-dlp, twitter-cli, …) runs with, read from its first lines, so its library can be
+    used from there. Handles "#!/path/python", "#!/usr/bin/env python3" and the "#!/bin/sh" + exec form that pip and
+    uv write when the interpreter's path is too long for a #! line."""
+    if not exe:
+        return None
+    try:
+        with open(exe, "rb") as f:
+            head = f.read(1024).decode("utf-8", errors="ignore").splitlines()
+    except OSError:
+        return None
+    if not head or not head[0].startswith("#!"):
+        return None
+    parts = head[0][2:].strip().split()
+    if parts and os.path.basename(parts[0]) == "env":
+        parts = [x for x in parts[1:] if not x.startswith("-")]
+        return shutil.which(parts[0]) if parts and "python" in parts[0] else None
+    if parts and "python" in os.path.basename(parts[0]):
+        return parts[0]
+    for line in head[1:4]:
+        m = SH_EXEC.match(line)
+        if m:
+            return m.group(1)
+    return None
+
+
 def which(cmd: str, extra: Iterable[str] = ()) -> str | None:
     """Find an executable on PATH, then in a few well-known install locations.
 

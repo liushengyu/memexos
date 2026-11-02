@@ -187,6 +187,28 @@ def query(cfg, mode: str, q: str, n: int, degraded: list) -> list[dict] | None:
     return out
 
 
+def models(cfg, action: str = "check", deep: bool = False) -> dict:
+    """The local models search needs: the embedding model (per [search.qmd] embed_model), the reranker and, with
+    deep=True, qmd's query expansion model (only `--mode deep` uses it). action "check" returns {model: path or None};
+    "pull" downloads what is missing (with a progress bar on a terminal) and never deletes or replaces a downloaded
+    model, unlike `qmd pull`."""
+    import importlib.resources as resources
+    pkg = package_dir()
+    if not pkg or not which("node"):
+        return {"ok": False, "why": "qmd or node not found", "models": {}}
+    want = [embed_model(cfg) or "embed", "rerank"] + (["generate"] if deep else [])
+    script = resources.files("memexos.search").joinpath("qmd_models.mjs")
+    import subprocess
+    r = subprocess.run(["node", str(script), action, *want], env={**_env(cfg), "QMD_PKG": str(pkg)}, stdout=subprocess.PIPE,
+                       stderr=None if action == "pull" else subprocess.PIPE, text=True, timeout=7200)
+    try:
+        found = json.loads((r.stdout or "").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        found = {}
+    return {"ok": r.returncode == 0 and all(found.get(m) for m in want), "models": found,
+            "why": "" if r.returncode == 0 else (r.stderr or "").strip()[-300:] if action != "pull" else "download failed"}
+
+
 def models_dir() -> Path:
     return Path(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")) / "qmd" / "models"
 

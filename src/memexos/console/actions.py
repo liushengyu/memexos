@@ -29,6 +29,19 @@ def start(cfg, job: str) -> tuple[bool, str]:
     return True, i18n.t("console.msg.started", job=i18n.t(f"job.{name}"))
 
 
+def login(cfg, site: str) -> tuple[bool, str]:
+    """Open the login window for a collector site on this computer (`memex login <site>`, detached)."""
+    from memexos.capture import cookies
+    if site not in cookies.SITES:
+        return False, i18n.t("console.msg.unknown")
+    logs = cfg.paths.state / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    with open(logs / f"login-{site}.log", "ab") as out:
+        subprocess.Popen(self_cmd() + ["login", site], stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
+                         env={**os.environ, "MEMEX_VAULT": str(cfg.vault)})
+    return True, i18n.t("console.msg.login_started", site=cookies.SITES[site].name)
+
+
 def abandon(cfg, branch: str) -> tuple[bool, str]:
     """Discard a held batch and queue its raw files again."""
     from memexos import events
@@ -84,4 +97,6 @@ def act(cfg, body: dict) -> tuple[bool, str]:
         return True, i18n.t("console.msg.accepted", n=n)
     if a == "abandon":
         return abandon(cfg, str(body.get("branch", "")))
+    if a == "login":
+        return login(cfg, str(body.get("site", "")))
     return False, i18n.t("console.msg.unknown")

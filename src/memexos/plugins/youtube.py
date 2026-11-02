@@ -1,6 +1,7 @@
 """Plugin: what you save on YouTube as an intake channel: "Liked videos", "Watch later" and any playlists you name.
 
-Needs a logged-in browser (plugins.youtube.browser) for the private lists; public playlists work without it. Lists are
+Needs your YouTube login (`memex login youtube`, see capture/cookies.py) for the private lists; public playlists work
+without it. Lists are
 read with yt-dlp. YouTube shows them newest first but does not say when a video was added, so each run reads from the
 top until it reaches a video it has already seen; the very first run takes at most first_run_max per list instead of
 your whole history. Admitted videos are captured like any other video (subtitles, else local transcription).
@@ -10,8 +11,10 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 
 from memexos import i18n
+from memexos.capture import cookies
 from memexos.capture.fetch import PageUnavailable, ytdlp_base
 from memexos.util import run
 
@@ -51,6 +54,8 @@ def collect(cfg, state: dict, done: set, since_days: float) -> list[list[dict]]:
         try:
             entries = list_entries(cfg, ref, first_max if first else per_run)
         except PageUnavailable as e:
+            if ref in LISTS and re.search(r"sign in|log in|login|cookies|private|does not exist", str(e), re.I):
+                cookies.mark_expired(cfg, "youtube", str(e)[:200])     # the private lists exist for every logged-in account
             errors.append(i18n.t("youtube.list_failed", list=LISTS.get(ref, ref), why=str(e)[:200]))
             continue
         for e in entries:
