@@ -35,7 +35,7 @@ def git(d: Path, *args: str) -> str:
 def build_prompt(base: str, raws: list[str], changed: list[str], mode: str = "ingest") -> str:
     return i18n.prompt("gate2_rubric") + i18n.prompt(
         "gate2_task", base=base, raws="\n".join(f"  - `{r}`" for r in raws), changed="\n".join(f"  - `{c}`" for c in changed),
-        fix_note=i18n.prompt("gate2_fix_note") if mode == "fix" else "")
+        fix_note=i18n.prompt("gate2_fix_note") if mode == "fix" else i18n.prompt("gate2_lint_note") if mode == "lint" else "")
 
 
 def decide(review: dict) -> tuple[list[str], list[str], dict]:

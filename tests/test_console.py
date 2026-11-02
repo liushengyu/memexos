@@ -91,3 +91,21 @@ def test_static_files_are_served_from_a_fixed_list():
     assert "/app/core.js" in server.STATIC_FILES and "/fonts/Sora.woff2" in server.STATIC_FILES
     assert all(k.startswith(("/app/", "/fonts/")) for k in server.STATIC_FILES)
     assert "/app/../index.html" not in server.STATIC_FILES
+
+
+def test_graph_resolves_links_like_gate1_and_counts_missing_pages(home, monkeypatch):
+    import subprocess
+    from memexos import config, scaffold
+    from memexos.console.data import Data
+    v = home / "memex"
+    scaffold.init(v, lang="en", write_user_config=False)
+    scaffold.copy_sample(v)
+    p = v / "wiki" / "concepts" / "Spaced repetition.md"
+    p.write_text(p.read_text() + "\nSee [[leitner system]] and [[Interleaved practice]].\n")
+    subprocess.run(["git", "-C", str(v), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(v), "commit", "-qm", "x"], check=True)
+    g = Data(config.load(v)).graph({})
+    names = {n["name"]: i for i, n in enumerate(g["nodes"])}
+    src, dst = names["Spaced repetition"], names["Leitner system"]
+    assert any(a == src and b == dst for a, b, _ in g["edges"])              # case differs, still one link
+    assert g["totals"]["dangling"] == 1 and g["missing"][0]["name"] == "Interleaved practice"

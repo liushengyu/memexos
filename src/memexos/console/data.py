@@ -337,6 +337,8 @@ class Data:
         ps = self.pages()
         cat = self.catalog()
         by_name = {p["name"]: p for p in ps}
+        by_lower = {p["name"].lower(): p for p in ps}
+        missing: collections.Counter = collections.Counter()
         nodes, idx = [], {}
         for p in ps:
             idx[p["path"]] = len(nodes)
@@ -354,9 +356,12 @@ class Data:
         for p in ps:
             i = idx[p["path"]]
             for o in p["out"]:
-                t = by_name.get(o)
+                t = by_name.get(o) or by_lower.get(o.lower())
                 if t and t["path"] != p["path"]:
                     edges.append([i, idx[t["path"]], relation(p["type"], t["type"])])
+                elif not t and o and not o.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")) and \
+                        not o.startswith(("raw/", "index", "log", "AGENTS")):
+                    missing[o] += 1
             for r in p["raws"]:
                 if r in idx:
                     edges.append([i, idx[r], "cites"])
@@ -373,8 +378,10 @@ class Data:
                     n["domain"] = c.most_common(1)[0][0] if c else n["domain"]
         doms = collections.Counter(n["domain"] for n in nodes if n["domain"])
         return {"nodes": nodes, "edges": edges, "domains": doms.most_common(),
+                "missing": [{"name": n, "links": c} for n, c in missing.most_common(50)],
                 "totals": {"wiki": len(ps), "raw": len(self.raw_files()), "cited_raw": sum(1 for n in nodes if n["type"] == "raw"),
-                           "links": len(edges), "domains": len({self.domain_group(r.get("domain")) for r in cat.values() if r.get("domain")})}}
+                           "links": len(edges), "dangling": len(missing),
+                           "domains": len({self.domain_group(r.get("domain")) for r in cat.values() if r.get("domain")})}}
 
     # ------------------------------------------------------------ the pipeline
     def recent_events(self, hours: float = 24, limit: int = 40) -> list[dict]:

@@ -126,7 +126,7 @@ pending and wait for the person's decision in the inbox (`memex catalog drafts`)
 If the reviewer cannot run (quota, network), the batch is discarded and compiling pauses for a while: nothing
 unreviewed is ever published. Minor problems in a passing review are recorded and repaired later by `memex fix`.
 
-`memex lint` (weekly) reorganizes and repairs the wiki as a whole under gate 1. `memex correct` applies feedback from
+`memex lint` (weekly) reorganizes and repairs the wiki as a whole; like every change it passes gate 1 and gate 2 (reviewed against the sources the changed pages cite) before it is published. Gate 1 treats a link that almost matches an existing page name (a typo, a quote style, a plural) as an error; a link to a page still to be written is a warning, and the console lists those names. `memex correct` applies feedback from
 `raw/feedback/` to exactly the sentences it targets, then reviews the change.
 
 ## Reading
