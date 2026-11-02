@@ -32,13 +32,20 @@ class PageUnavailable(Exception):
     pass
 
 
+def host_is(host: str, *domains: str) -> bool:
+    """True when host is one of the domains or a subdomain of one ("m.youtube.com" is youtube.com,
+    "youtube.com.example.net" and "notyoutube.com" are not)."""
+    host = (host or "").lower().rstrip(".")
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
 def platform(url: str) -> str:
-    h = urllib.parse.urlparse(url).netloc.lower()
-    if "bilibili.com" in h or "b23.tv" in h:
+    h = urllib.parse.urlparse(url).hostname or ""
+    if host_is(h, "bilibili.com", "b23.tv"):
         return "bilibili"
-    if "youtube.com" in h or "youtu.be" in h:
+    if host_is(h, "youtube.com", "youtu.be"):
         return "youtube"
-    if h.endswith("x.com") or h.endswith("twitter.com"):
+    if host_is(h, "x.com", "twitter.com"):
         return "x"
     return "web"
 

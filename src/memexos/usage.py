@@ -39,7 +39,9 @@ NOT_FOUND = re.compile(r"not in the (?:knowledge base|kb)|knowledge base (?:has|
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?")
 PAGE_REF = re.compile(r"(?:wiki|raw)/[^\s)\]」”，。、`*|]+?\.md")
 WIKILINK = re.compile(r"\[\[([^\]|#]+)")
-JS_CMD = re.compile(r"""cmd\s*:\s*(['"`])((?:\\.|(?!\1).)*)\1""", re.S)
+# an escaped character, or any character that is neither the closing quote nor a backslash: one way to match each
+# character, so a long run of backslashes cannot make the matcher backtrack exponentially
+JS_CMD = re.compile(r"""cmd\s*:\s*(['"`])((?:\\.|(?!\1)[^\\])*)\1""", re.S)
 
 
 def dirs(cfg) -> Path:

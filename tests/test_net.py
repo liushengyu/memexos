@@ -70,3 +70,15 @@ def test_urllib_refuses_https_proxy_clearly(base):
 def test_last_header_block_wins():
     raw = "HTTP/1.1 200 Connection established\r\n\r\nHTTP/2 301\r\nlocation: /next\r\n\r\n"
     assert net._last_block(raw) == (301, {"location": "/next"})
+
+
+def test_platform_matches_whole_host_names():
+    from memexos.capture.fetch import platform
+    assert platform("https://www.youtube.com/watch?v=x") == "youtube"
+    assert platform("https://youtu.be/x") == "youtube"
+    assert platform("https://m.bilibili.com/video/BV1") == "bilibili"
+    assert platform("https://x.com/a/status/1") == "x"
+    assert platform("https://youtube.com.example.net/watch") == "web"
+    assert platform("https://notyoutube.com/") == "web"
+    assert platform("https://box.com/file") == "web"
+    assert platform("https://user@evil.example/?u=bilibili.com") == "web"

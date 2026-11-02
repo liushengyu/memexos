@@ -32,6 +32,9 @@ from memexos.console.data import Data
 from memexos.util import atomic_write, self_cmd
 
 STATIC = Path(__file__).parent / "static"
+# the console's own scripts, styles and fonts, by URL path ("/app/core.js" → file); nothing else is served from disk
+STATIC_FILES = {"/" + f.relative_to(STATIC).as_posix(): f for f in STATIC.rglob("*")
+                if f.is_file() and f.parts[len(STATIC.parts)] in ("app", "fonts")}
 CTYPES = {".woff2": "font/woff2", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
           ".html": "text/html; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8"}
 UI_PREFIXES = ("console.", "job.", "step.", "report.kind.", "report.sev.")
@@ -112,8 +115,10 @@ def handler(con: Console):
                        "font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
                 return self._send(200, con.index(nonce), CTYPES[".html"], {"Content-Security-Policy": csp, "X-Frame-Options": "DENY"})
             if u.path.startswith(("/app/", "/fonts/")):
-                p = (STATIC / u.path.lstrip("/")).resolve()
-                if not str(p).startswith(str(STATIC.resolve()) + os.sep) or not p.is_file():
+                # only files that exist in the console's static folder are served; the request path is a key into
+                # that list, never part of a file system path
+                p = STATIC_FILES.get(u.path)
+                if p is None:
                     return self._send(404, {"error": "not_found"})
                 return self._send(200, p.read_bytes(), CTYPES.get(p.suffix, "application/octet-stream"))
             fn = con.routes.get(u.path)

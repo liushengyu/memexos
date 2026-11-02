@@ -148,3 +148,14 @@ def test_unit_ids_do_not_depend_on_the_window(home, monkeypatch):
     wide = runs.timeline(st, time.time() - 30 * 86400)
     narrow = runs.timeline(st, time.time() - 3600)
     assert {u["id"] for u in narrow} <= {u["id"] for u in wide} and len(narrow) == 3
+
+
+def test_command_pattern_is_fast_on_many_backslashes():
+    import time
+    from memexos import usage
+    s = 'cmd: "' + "\\\\" * 5000 + "x"            # never closed: a backtracking pattern would take forever
+    t0 = time.time()
+    assert usage.JS_CMD.search(s) is None
+    assert time.time() - t0 < 1.0
+    m = usage.JS_CMD.search('cmd: "memex search \\"q\\""')
+    assert m and m.group(2) == 'memex search \\"q\\"'

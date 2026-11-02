@@ -84,3 +84,10 @@ def test_chinese_strings_cover_the_same_keys():
     zh = ui_strings("zh")
     assert zh["nav.overview"] == "总览" and zh["job.ingest"] == "编译" and zh["step.gate2"] == "独立审校"
     assert set(ui_strings("en")) == set(zh)
+
+
+def test_static_files_are_served_from_a_fixed_list():
+    from memexos.console import server
+    assert "/app/core.js" in server.STATIC_FILES and "/fonts/Sora.woff2" in server.STATIC_FILES
+    assert all(k.startswith(("/app/", "/fonts/")) for k in server.STATIC_FILES)
+    assert "/app/../index.html" not in server.STATIC_FILES
