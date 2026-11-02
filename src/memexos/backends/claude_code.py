@@ -12,7 +12,8 @@ import time
 from pathlib import Path
 
 from memexos import i18n
-from memexos.backends.base import NETWORK_RE, QUOTA_RE, READ_ONLY_NOTE, TRANSIENT_STATUS, Backend, Policy, Result, parse_json_text
+from memexos.backends.base import (LOGIN_TTL, NETWORK_RE, QUOTA_RE, READ_ONLY_NOTE, SECRET_PATHS, TRANSIENT_STATUS, Backend, Policy,
+                                   Result, parse_json_text)
 from memexos.util import proxy_env, run, which
 
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
@@ -36,14 +37,50 @@ def _settings_env() -> dict:
     return {k: str(v) for k, v in env.items() if k.isidentifier()}
 
 
+def _rule(p) -> str:
+    """A permission-rule path: "//abs/path/**" for a directory (Claude Code reads "//" as an absolute path)."""
+    p = Path(p).resolve()
+    return f"/{p}/**" if p.is_dir() or not p.suffix else f"/{p}"
+
+
 class ClaudeCode(Backend):
     name = "claude-code"
+    _login: dict = {}            # exe → (checked at, ok, why)
 
     def exe(self) -> str | None:
         return which(self.section.get("command") or "claude")
 
+    def env(self) -> dict:
+        env = dict(__import__("os").environ)
+        if self.section.get("settings_env"):
+            env.update(_settings_env())
+        return proxy_env(env, _proxy(self.section))
+
     def available(self) -> tuple[bool, str]:
-        return (True, "") if self.exe() else (False, i18n.t("backend.cmd_missing", cmd=self.section.get("command") or "claude"))
+        exe = self.exe()
+        if not exe:
+            return False, i18n.t("backend.cmd_missing", cmd=self.section.get("command") or "claude")
+        if self.section.get("check_login", True) is False:
+            return True, ""
+        hit = ClaudeCode._login.get(exe)
+        if hit and hit[1] and time.time() - hit[0] < LOGIN_TTL:
+            return True, ""
+        ok, why = self._check_login(exe)
+        ClaudeCode._login[exe] = (time.time(), ok, why)
+        return ok, why
+
+    def _check_login(self, exe: str) -> tuple[bool, str]:
+        """`claude auth status --json` with the environment the runs will have. An older CLI without that command is
+        given the benefit of the doubt."""
+        try:
+            r = run([exe, "auth", "status", "--json"], env=self.env(), timeout=30)
+            j = json.loads(r.stdout or "{}")
+        except Exception:  # noqa: BLE001 — no such subcommand, or no JSON: cannot tell
+            return True, ""
+        if j.get("loggedIn") is False:
+            return False, i18n.t("backend.not_logged_in", cmd="claude", login="claude (then /login)") + \
+                (" " + i18n.t("backend.settings_env_hint") if not self.section.get("settings_env") and _settings_env() else "")
+        return True, ""
 
     def _base(self, effort: str) -> list[str]:
         cmd = [self.exe() or "claude", "-p"]
@@ -55,12 +92,8 @@ class ClaudeCode(Backend):
     def _run(self, cmd: list[str], prompt: str, cwd: Path, workdir: Path, timeout: float, schema: dict | None) -> Result:
         workdir.mkdir(parents=True, exist_ok=True)
         t0 = time.time()
-        env = dict(__import__("os").environ)
-        if self.section.get("settings_env"):
-            env.update(_settings_env())
-        env = proxy_env(env, _proxy(self.section))
         try:
-            r = run(cmd, cwd=cwd, input=prompt, env=env, timeout=timeout)
+            r = run(cmd, cwd=cwd, input=prompt, env=self.env(), timeout=timeout)
             rc, out, err = r.returncode, r.stdout, r.stderr
         except Exception as e:  # noqa: BLE001 — timeout or launch failure
             rc, out, err = "timeout" if "Timeout" in type(e).__name__ else "error", "", repr(e)
@@ -109,21 +142,25 @@ class ClaudeCode(Backend):
         text = prompt + READ_ONLY_NOTE.get(i18n.language(), READ_ONLY_NOTE["en"]) + (("\n" + extra) if extra else "")
         if images:
             text += "\n" + "\n".join(f"- {p}" for p in images) + "\n"
+        dirs = sorted({str(Path(p).resolve().parent) for p in images})
+        readable = [f"Read({_rule(d)})" for d in [cwd, *dirs]]
         cmd = self._base(effort) + ["--json-schema", json.dumps(schema, ensure_ascii=False),
-                                    "--tools", "Read,Glob,Grep", "--allowedTools", "Read", "Glob", "Grep",
-                                    "--permission-mode", "dontAsk"]
-        for d in sorted({str(Path(p).resolve().parent) for p in images}):
+                                    "--tools", "Read,Glob,Grep", "--permission-mode", "dontAsk",
+                                    "--allowedTools", *readable, "Glob", "Grep",
+                                    "--disallowedTools", *[f"Read({p})" for p in SECRET_PATHS]]
+        for d in dirs:
             cmd += ["--add-dir", d]
         return self._run(cmd, text, Path(cwd), Path(workdir), timeout, schema)
 
     def agent(self, prompt, *, cwd, workdir, policy: Policy, effort="high", timeout=3600, schema=None, images=()):
-        tools, allowed = ["Read", "Glob", "Grep"], ["Read", "Glob", "Grep"]
+        # reading is limited to cwd, the policy's extra folders and the images' folders; writing to policy.write
+        img_dirs = {Path(p).resolve().parent for p in images}
+        tools = ["Read", "Glob", "Grep"]
+        allowed = [f"Read({_rule(d)})" for d in [cwd, *policy.read, *sorted(img_dirs)]] + ["Glob", "Grep"]
         if policy.write:
             tools += ["Edit", "Write"]
             for p in policy.write:
-                p = Path(p).resolve()
-                rule = f"/{p}/**" if p.is_dir() or not p.suffix else f"/{p}"   # "//abs" = absolute path in permission rules
-                allowed += [f"Edit({rule})", f"Write({rule})"]
+                allowed += [f"Edit({_rule(p)})", f"Write({_rule(p)})"]
         if policy.commands:
             tools.append("Bash")
             allowed += [f"Bash({' '.join(c)} *)" for c in policy.commands] + [f"Bash({' '.join(c)})" for c in policy.commands]
@@ -131,9 +168,8 @@ class ClaudeCode(Backend):
             tools += ["WebSearch", "WebFetch"]
             allowed += ["WebSearch", "WebFetch"]
         cmd = self._base(effort) + ["--tools", ",".join(tools), "--permission-mode", "dontAsk", "--allowedTools", *allowed]
-        if policy.deny_read:
-            cmd += ["--disallowedTools", *[f"Read({p})" for p in policy.deny_read]]
-        for d in sorted({str(Path(p).resolve()) for p in policy.read} | {str(Path(p).resolve().parent) for p in images}):
+        cmd += ["--disallowedTools", *[f"Read({p})" for p in dict.fromkeys(SECRET_PATHS + list(policy.deny_read))]]
+        for d in sorted({str(Path(p).resolve()) for p in policy.read} | {str(d) for d in img_dirs}):
             cmd += ["--add-dir", d]
         if schema is not None:
             cmd += ["--json-schema", json.dumps(schema, ensure_ascii=False)]

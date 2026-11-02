@@ -6,6 +6,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+# The environment the test run started with: tests that call the real `claude` / `codex` tools use it, so those
+# tools find their own installation and login (the `home` fixture replaces HOME).
+ORIGINAL_ENV = dict(os.environ)
+
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):

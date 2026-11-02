@@ -98,6 +98,15 @@ def parse_json_text(text: str) -> Any:
     return None
 
 
+# Never readable by any agent, whatever the task: credentials and browser profiles.
+SECRET_PATHS = ["~/.ssh/**", "~/.gnupg/**", "~/.aws/**", "~/.config/gh/**", "~/.codex/auth.json", "~/.claude/.credentials.json",
+                "~/.config/memexos/cookies/**", "~/.local/share/memexos/browser/**", "**/.env", "**/.env.*",
+                "~/Library/Keychains/**", "~/Library/Application Support/Google/Chrome/**", "~/.config/google-chrome/**",
+                "~/.mozilla/**"]
+
+LOGIN_TTL = 600          # seconds a positive login check is trusted within one process
+
+
 READ_ONLY_NOTE = {
     "en": "\n\n---\n(Environment: you can read files with your file tools but must not modify anything. Where the instructions "
           "mention shell commands (cat, rg, ls, git), use the file tools instead; command output the task needs, such as a "
