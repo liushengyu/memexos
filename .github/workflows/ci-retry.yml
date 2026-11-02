@@ -1,0 +1,38 @@
+# When GitHub has no free machine for a job (it happens with macOS), it cancels the job before any step runs and the
+# CI run fails although nothing was tested. This re-runs such jobs, and only such jobs, at most twice.
+# A job that ran and failed is never re-run. Only the GitHub API is used; no code from the pull request is checked out.
+name: CI retry
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  retry:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 3
+    runs-on: ubuntu-latest
+    steps:
+      - name: re-run jobs that never got a machine
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.event.workflow_run.id }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          latest=$(gh run list --repo "$REPO" --workflow CI --branch "$BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ "$latest" != "$RUN" ]; then echo "a newer run exists for $BRANCH; nothing to do"; exit 0; fi
+          jobs=$(gh api "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" --jq '.jobs')
+          ran_and_failed=$(echo "$jobs" | jq '[.[] | select(.name != "ci-ok")
+            | select(.conclusion == "failure" or .conclusion == "timed_out"
+                     or (.conclusion == "cancelled" and ((.steps // []) | length) > 0))] | length')
+          never_started=$(echo "$jobs" | jq '[.[] | select(.conclusion == "cancelled" and ((.steps // []) | length) == 0)] | .[].name')
+          echo "jobs that ran and failed: $ran_and_failed"
+          echo "jobs that never got a machine: ${never_started:-none}"
+          if [ "$ran_and_failed" = 0 ] && [ -n "$never_started" ]; then
+            gh run rerun "$RUN" --failed --repo "$REPO"
+            echo "re-run requested"
+          fi

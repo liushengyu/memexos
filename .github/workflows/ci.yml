@@ -1,5 +1,8 @@
 # Every pull request and every change to main runs these jobs. The branch rules for main require the
 # "ci-ok" job, which passes only when all the others passed.
+# macOS runs on pull requests (where it decides whether a change may be merged) but not again after the merge: the
+# merged code already passed it, and GitHub's macOS machines are often busy, which cancelled jobs that never started
+# and failed main for nothing. ci-retry.yml re-runs jobs that never got a machine.
 name: CI
 
 on:
@@ -27,7 +30,7 @@ jobs:
       - name: shellcheck the installer and the git hook
         run: shellcheck -s sh -S warning install.sh .githooks/pre-commit
       - name: console scripts parse
-        run: for f in $(find src/memexos/console/static -name '*.js'); do node --check "$f"; done
+        run: find src/memexos/console/static -name '*.js' -print0 | while IFS= read -r -d '' f; do node --check "$f" || exit 1; done
 
   test:
     name: test (${{ matrix.os }}, Python ${{ matrix.python }})
@@ -36,9 +39,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python: ["3.11", "3.12", "3.13", "3.14", "3.15"]
-        include:
-          - os: macos-latest
-            python: "3.12"
+        include: ${{ fromJSON(github.event_name == 'push' && '[]' || '[{"os":"macos-latest","python":"3.12"}]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -128,7 +129,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
