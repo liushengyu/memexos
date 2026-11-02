@@ -4,9 +4,9 @@ memex search "<question>" [--kw "<keywords…>"] [-n 8] [--mode auto|fast|keywor
   result lists are fused by rank, and the top candidates are reranked by asking whether each page contains the information
   needed to answer, not merely the same topic. Without qmd it uses the built-in keyword index.
 
-  --kw     2–5 keywords you picked, space separated, in the language the pages are written in ($language). A keyword of
-           several words is matched as a phrase only when quoted inside: --kw '"rank fusion" RRF'. Without --kw they
-           are guessed from the question, usually less precisely
+  --kw     2–5 keywords you picked, in the language the pages are written in ($language): in one --kw separated by
+           commas (--kw "rank fusion, RRF") or spaces (a phrase in quotes: --kw '"rank fusion" RRF'), or one --kw per
+           keyword (--kw "rank fusion" --kw RRF). Without --kw they are guessed from the question, usually less precisely
   -n       how many results (default 8)
   --mode   fast: fused results without reranking · keyword: keyword index only (milliseconds; works in read-only sandboxes)
            vector: vector search only · deep: qmd's query expansion + reranker (slowest)

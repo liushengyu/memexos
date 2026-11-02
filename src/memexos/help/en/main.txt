@@ -15,8 +15,9 @@ Search
   memex catalog list --domain <domain> --evidence <evidence>
       Filter sources by domain and evidence strength (memex catalog stats lists the domains).
   memex feedback <page> --kind incorrect|outdated|missing --why "<reason>"
-      Report a page that is wrong, outdated or missing something you needed (add --evidence "<source>" when you have one).
-      Reports are checked against the original sources before anything changes.
+      Report a page that is wrong, outdated or missing something it should cover (add --evidence "<source>" when you
+      have one). Reports are checked against the original sources before anything changes. Not for a question the
+      knowledge base simply has no answer to (just say so), and not for saving new conclusions (see "Add things").
 
 Add things (only into raw/; compiling and review happen automatically)
   memex add-url <link>     articles, tweets, podcasts, videos

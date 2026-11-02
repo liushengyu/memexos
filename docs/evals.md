@@ -77,6 +77,26 @@ searched the base at all; whether it opened a right page (which separates "did n
 badly"); whether its citations hold; time and cost. Use `--same-as` to rerun the same questions after a change and
 compare.
 
+## Tool use
+
+`memex eval tooluse run [--n 20] [--agents claude-code,codex] [--no-tasks] [--same-as RUN]` asks a different question
+from L2: not only whether the answer was right, but whether the agent called the right commands with the right
+arguments, and how directly it got there. Each agent works as in real use (`memex` on the PATH, the text of
+`memex help` in its context, no direct access to the knowledge base's files); in an evaluation run memex records every
+call it receives, with its arguments and exit status, and commands that would change something are only recorded.
+
+Every scenario has a reference flow: the calls that must happen (command, argument rules such as "--kw given, in the
+pages' language", result rules such as "a right page in the top 5"), whether their order matters, and the fewest calls
+a capable agent needs. Questions from the retrieval bank get a reference flow by type (a fact: search, then open a right
+page); task scenarios in `.memex/evals/tooluse/scenarios.jsonl` describe other jobs (save a link, report a page, list
+sources by evidence, keep a conclusion, check status) and spell out their own.
+
+Scores per agent and per scenario type: done right; reference calls made; calls with correct arguments; calls made
+against the fewest needed (efficiency = fewest ÷ made, for the scenarios done right); failed and repeated calls; the call
+that first reached a right page; other shell commands; time and tokens. `tooluse-report.md` lists every detour with the
+reference and each call the agent made. `memex eval tooluse report [RUN]` scores a saved run again after the rules
+change, and `--same-as` reruns the same scenarios to compare before and after a change.
+
 ## Reports
 
 Each run writes to `<state>/evals/retrieval/<time>/`: `report.md` for L1 (overall, by type, and typical misses: what

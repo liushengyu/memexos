@@ -21,6 +21,18 @@ if log:
         f.write(json.dumps({"tool": name, "argv": args, "stdin": stdin, "cwd": os.getcwd(),
                             "env": {k: os.environ.get(k) for k in ("HTTPS_PROXY", "CLAUDE_CODE_OAUTH_TOKEN")}}) + "\n")
 
+# An agent's tool calls: {"plans": {"<text in the prompt>": [["search", "q", "--kw", "k"], ...]}} runs those memex
+# commands ($FAKE_MEMEX, a JSON list) in order, as the agent would, before answering.
+ran = []
+for key, calls in (reply.get("plans") or {}).items():
+    if key in stdin:
+        import subprocess
+        memex = json.loads(os.environ.get("FAKE_MEMEX") or "[]")
+        for c in calls:
+            subprocess.run(memex + c, capture_output=True, text=True)
+            ran.append(" ".join(memex + c))
+        break
+
 if name == "claude":
     if args[:2] == ["auth", "status"]:
         print(json.dumps({"loggedIn": logged_in, "authMethod": "claude.ai"}))
@@ -51,6 +63,10 @@ if name == "codex":
         Path(o).write_text(text, encoding="utf-8")
     print(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 100, "cached_input_tokens": 0, "output_tokens": 20,
                                                           "reasoning_output_tokens": 5}}))
+    for c in ran:
+        print(json.dumps({"type": "item.completed", "item": {"type": "command_execution", "command": c}}))
+    for c in reply.get("other_commands", []):
+        print(json.dumps({"type": "item.completed", "item": {"type": "command_execution", "command": c}}))
     print(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": text}}))
     sys.exit(0)
 sys.exit(2)

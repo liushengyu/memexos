@@ -318,7 +318,8 @@ class Data:
         if not text:
             return {"hits": []}
         if self._cache.get("search_head") != self.head():
-            scli._compiled = None                    # the raw → source page map is rebuilt after new commits
+            scli._compiled.clear()                   # the raw → source page map is rebuilt after new commits
+            scli._raw_names.clear()
             self._cache["search_head"] = self.head()
         t0 = time.time()
         hits, kws, degraded = engine.search(self.cfg, text, None, 12, q.get("mode", "auto"), None)

@@ -97,8 +97,11 @@ class Browser:
 
     # -------------------------------------------------------- process
     def args(self) -> list[str]:
+        # no traffic of its own (updates, safe-browsing lists, metrics): it only opens the sites it is sent to, through
+        # the route MemexOS gives it
         a = [self.exe, f"--user-data-dir={self.profile}", "--remote-debugging-pipe", "--no-first-run",
-             "--no-default-browser-check", "--disable-sync", "--use-mock-keychain", "--password-store=basic"]
+             "--no-default-browser-check", "--disable-sync", "--use-mock-keychain", "--password-store=basic",
+             "--disable-background-networking", "--disable-component-update", "--no-pings", "--metrics-recording-only"]
         if self.headless:
             a += ["--headless=new", "--mute-audio"]
         if self.user_agent:

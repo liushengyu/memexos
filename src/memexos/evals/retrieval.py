@@ -455,37 +455,52 @@ def sample(items: list[dict], n: int) -> list[dict]:
 
 def answer(cfg, agent: str, it: dict, d: Path) -> dict:
     """One agent answers in an empty directory that has nothing to do with the vault, as when the owner asks from
-    another project. What it searched and opened comes from the search/read events of its own run id."""
+    another project, with only the command line interface. Every memex call it makes is traced (command, arguments,
+    exit status) and scored for tool use (evals/tooluse.py); what its searches returned and which pages it opened
+    come from the search/read events of its own run id. Commands with side effects are only recorded."""
+    from memexos.evals import tooluse
     me = self_cmd()
     rid = f"eval-l2-{agent.replace(':', '-')}-{it['id']}-{secrets.token_hex(2)}"
     work = Path(tempfile.mkdtemp(prefix="memex-l2-"))
-    old = os.environ.get("MEMEX_RUN")
-    os.environ["MEMEX_RUN"] = rid
+    trace = d / "l2" / f"{rid}.calls.jsonl"
+    trace.parent.mkdir(parents=True, exist_ok=True)
+    saved = {k: os.environ.get(k) for k in ("MEMEX_RUN", "MEMEX_TRACE", "MEMEX_EVAL_STUB", "PATH")}
+    os.environ.update(MEMEX_RUN=rid, MEMEX_TRACE=str(trace), MEMEX_EVAL_STUB=tooluse.STUB)
     t0 = time.time()
+    task = it.get("type") == "task"
     try:
-        prompt = i18n.prompt("eval_l2_context", memex=" ".join(me), question=it["question"])
-        # the state directory is writable so the agent's `memex search` / `memex get` can record what it looked at
-        pol = backends.Policy(write=[work, cfg.paths.state], read=[cfg.vault],
-                              commands=[me + ["search"], me + ["get"], me + ["catalog"], me + ["help"]])
+        # As in real use: `memex` is on the PATH and the agent has read `memex help` (its text is in the prompt).
+        os.environ["PATH"] = f"{tooluse.memex_shim(d, me)}{os.pathsep}{os.environ.get('PATH', '')}"
+        from memexos import agenthelp
+        prompt = i18n.prompt("eval_task_context" if task else "eval_l2_context", memex="memex", help=agenthelp.text("main", cfg) or "",
+                             question=it.get("task") if task else it["question"])
+        # only the command line: no direct reads of the knowledge base's files. The state directory is writable so
+        # the agent's memex calls can record what they did.
+        pol = backends.Policy(write=[work, cfg.paths.state, trace.parent], commands=[["memex"], me])
         with events.step(cfg.paths.state, "eval_answer", agent=agent, question=it["id"]) as info:
             r = backends.agent(cfg, "@" + agent, prompt, cwd=work, workdir=d / "l2" / rid, policy=pol, effort="medium",
                                timeout=float(cfg.get("evals.l2_timeout") or 1200), job="eval")
             info.update(ok=r.ok, model=r.model, cost_usd=r.cost_usd)
     finally:
-        if old is None:
-            os.environ.pop("MEMEX_RUN", None)
-        else:
-            os.environ["MEMEX_RUN"] = old
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
         shutil.rmtree(work, ignore_errors=True)
     seen = list(events.read(cfg.paths.state, since=t0 - 1, run=rid))
+    calls = tooluse.load_calls(trace, seen)
     searched = [e["data"].get("query") for e in seen if e["type"] == "search"]
     found = {p for e in seen if e["type"] == "search" for p in e["data"].get("top", [])[:5]} | \
             {e["data"].get("path") for e in seen if e["type"] == "read"}
     gold = set(it.get("gold_pages", [])) | set(it.get("gold_raw", []))
-    return {"id": it["id"], "agent": agent, "answer": r.text or "", "ok": r.ok, "why": "" if r.ok else r.tail[-300:],
-            "secs": round(time.time() - t0), "cost_usd": r.cost_usd, "model": r.model, "searched": searched,
+    return {"id": it["id"], "agent": agent, "run": rid, "type": it.get("type"), "answer": r.text or "", "ok": r.ok,
+            "why": "" if r.ok else r.tail[-300:], "secs": round(time.time() - t0), "cost_usd": r.cost_usd, "model": r.model,
+            "tokens": tooluse.total_tokens(r.usage), "searched": searched,
             "opened": sorted(e["data"].get("path") for e in seen if e["type"] == "read"),
-            "used_kb": bool(seen), "found_gold": bool(found & gold)}
+            "used_kb": bool(calls) or bool(seen), "found_gold": bool(found & gold),
+            "tool": tooluse.score(it, calls, cfg.vault, cfg.language, load_qrels(cfg)) if r.ok else None,
+            "denials": len(r.denials), "other_commands": tooluse.other_commands(d / "l2" / rid, me)}
 
 
 def l2(cfg, n: int = 20, agents: list[str] | None = None, same_as: Path | None = None) -> Path:

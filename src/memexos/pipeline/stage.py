@@ -177,6 +177,13 @@ class Stage:
         self.discard_worktree()
         git(self.vault, "branch", "-q", "-d", self.branch, check=False)
         events.emit(self.cfg.paths.state, "publish", branch=self.branch, message=message[:300])
+        # the full-text index right away (it takes well under a second), so a search just after publishing finds the
+        # new pages; vectors follow in the background
+        try:
+            from memexos.search import fts
+            fts.update(self.vault, self.cfg.paths.search_index)
+        except Exception:  # noqa: BLE001 — the background reindex retries
+            pass
         reindex_in_background(self.cfg)
         return True
 
