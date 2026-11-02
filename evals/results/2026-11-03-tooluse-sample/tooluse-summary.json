@@ -1,0 +1,108 @@
+{
+ "claude-code": {
+  "scenarios": 19,
+  "success": 0.8421052631578947,
+  "procedure_ok": 0.8947368421052632,
+  "arg_ok": 0.9344262295081968,
+  "calls": 3.210526315789474,
+  "min_calls": 1.894736842105263,
+  "efficiency": 0.619764705882353,
+  "failed_calls": 0,
+  "repeated_calls": 0,
+  "first_gold_call": 1,
+  "other_commands": 0,
+  "secs": 15.473684210526315,
+  "tokens": 30934.78947368421,
+  "by_type": {
+   "fact": {
+    "n": 6,
+    "procedure_ok": 0.8333333333333334,
+    "calls": 2.6666666666666665,
+    "min_calls": 2
+   },
+   "synth": {
+    "n": 3,
+    "procedure_ok": 0.6666666666666666,
+    "calls": 3.3333333333333335,
+    "min_calls": 2.6666666666666665
+   },
+   "usage": {
+    "n": 2,
+    "procedure_ok": 1.0,
+    "calls": 4,
+    "min_calls": 2
+   },
+   "negative": {
+    "n": 2,
+    "procedure_ok": 1.0,
+    "calls": 5.5,
+    "min_calls": 1
+   },
+   "real": {
+    "n": 1,
+    "procedure_ok": 1.0,
+    "calls": 4,
+    "min_calls": 2
+   },
+   "task": {
+    "n": 5,
+    "procedure_ok": 1.0,
+    "calls": 2.4,
+    "min_calls": 1.6
+   }
+  }
+ },
+ "codex": {
+  "scenarios": 19,
+  "success": 0.9473684210526315,
+  "procedure_ok": 1.0,
+  "arg_ok": 0.9841269841269841,
+  "calls": 3.3157894736842106,
+  "min_calls": 1.894736842105263,
+  "efficiency": 0.6719473684210526,
+  "failed_calls": 1,
+  "repeated_calls": 0,
+  "first_gold_call": 1.2,
+  "other_commands": 0,
+  "secs": 36.21052631578947,
+  "tokens": 86795.73684210527,
+  "by_type": {
+   "fact": {
+    "n": 6,
+    "procedure_ok": 1.0,
+    "calls": 2.3333333333333335,
+    "min_calls": 2
+   },
+   "synth": {
+    "n": 3,
+    "procedure_ok": 1.0,
+    "calls": 4.333333333333333,
+    "min_calls": 2.6666666666666665
+   },
+   "usage": {
+    "n": 2,
+    "procedure_ok": 1.0,
+    "calls": 3,
+    "min_calls": 2
+   },
+   "negative": {
+    "n": 2,
+    "procedure_ok": 1.0,
+    "calls": 4.5,
+    "min_calls": 1
+   },
+   "real": {
+    "n": 1,
+    "procedure_ok": 1.0,
+    "calls": 5,
+    "min_calls": 2
+   },
+   "task": {
+    "n": 5,
+    "procedure_ok": 1.0,
+    "calls": 3.2,
+    "min_calls": 1.6
+   }
+  }
+ }
+}

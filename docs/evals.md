@@ -97,6 +97,8 @@ that first reached a right page; other shell commands; time and tokens. `tooluse
 reference and each call the agent made. `memex eval tooluse report [RUN]` scores a saved run again after the rules
 change, and `--same-as` reruns the same scenarios to compare before and after a change.
 
+Published runs: [evals/results/](../evals/results/) (for example Claude Code and Codex on the sample knowledge base).
+
 ## Reports
 
 Each run writes to `<state>/evals/retrieval/<time>/`: `report.md` for L1 (overall, by type, and typical misses: what
