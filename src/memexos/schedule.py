@@ -80,6 +80,25 @@ def specs(cfg) -> dict[str, dict]:
     }
 
 
+# macOS keeps background jobs out of these folders unless the program has been given access (privacy settings,
+# "Files and Folders" or "Full Disk Access"); a scheduled job reading a knowledge base there fails with
+# "Operation not permitted" every time, and nobody sees it
+PROTECTED = ("Documents", "Desktop", "Downloads", "Library/Mobile Documents")
+
+
+def protected_folder(path: Path) -> str | None:
+    """The macOS privacy-protected folder that path lies in (for example "Documents"), or None."""
+    if platform.system() != "Darwin":
+        return None
+    p = Path(path).expanduser().resolve()
+    home = Path.home().resolve()
+    for name in PROTECTED:
+        root = home / name
+        if p == root or root in p.parents:
+            return "~/" + name
+    return None
+
+
 def label(cfg, job: str) -> str:
     from memexos.config import vault_id
     return f"{cfg.get('schedule.label_prefix') or 'io.memexos'}.{vault_id(cfg.vault)}.{job}"
@@ -326,6 +345,7 @@ def cmd_schedule(loader, argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="memex schedule")
     ap.add_argument("action", nargs="?", default="list", choices=["install", "remove", "list", "show"])
     ap.add_argument("--only", nargs="*", choices=JOBS)
+    ap.add_argument("--force", action="store_true", help="install even if macOS will keep the jobs out of the knowledge base")
     a = ap.parse_args(argv)
     cfg = loader()
     be = backend_name(cfg)
@@ -340,6 +360,10 @@ def cmd_schedule(loader, argv: list[str]) -> int:
         return 0
     if be == "none":
         print(i18n.t("schedule.none"))
+        return 1
+    blocked = protected_folder(cfg.vault)
+    if a.action == "install" and blocked and not a.force:
+        print(i18n.t("schedule.protected", folder=blocked, vault=cfg.vault), file=sys.stderr)
         return 1
     fn = {"launchd": (launchd_install, launchd_remove), "systemd": (systemd_install, systemd_remove), "cron": (cron_install, cron_remove)}[be]
     for line in (fn[0](cfg, jobs) if a.action == "install" else fn[1](cfg)):

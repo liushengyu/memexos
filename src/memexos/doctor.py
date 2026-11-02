@@ -102,6 +102,9 @@ def checks(cfg) -> list[dict]:
     try:
         from memexos import schedule
         add(sched, i18n.t("doctor.scheduler", backend=schedule.backend_name(cfg)), schedule.backend_name(cfg) != "none", False)
+        blocked = schedule.protected_folder(cfg.vault)
+        if blocked:
+            add(sched, i18n.t("doctor.protected", folder=blocked), False, True, i18n.t("doctor.hint.protected"))
     except ImportError:
         pass
     return out

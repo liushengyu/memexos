@@ -55,3 +55,15 @@ def test_cron_lines(cfg):
     assert any(l.startswith("17 3 * * * ") for l in lines)                      # nightly
     assert any(l.startswith("7 21 * * 0 ") for l in lines)                      # lint, Sunday
     assert all(l.endswith(f"# memexos {schedule.label(cfg, '')}") for l in lines)
+
+
+def test_protected_macos_folders(monkeypatch, tmp_path):
+    from pathlib import Path
+    from memexos import schedule
+    monkeypatch.setattr(schedule.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    assert schedule.protected_folder(tmp_path / "Documents" / "kb") == "~/Documents"
+    assert schedule.protected_folder(tmp_path / "Library" / "Mobile Documents" / "x") == "~/Library/Mobile Documents"
+    assert schedule.protected_folder(tmp_path / "memex") is None
+    monkeypatch.setattr(schedule.platform, "system", lambda: "Linux")
+    assert schedule.protected_folder(tmp_path / "Documents" / "kb") is None
