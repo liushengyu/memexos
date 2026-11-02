@@ -49,8 +49,12 @@ retry_after_minutes = 60
 # through the "env" block of ~/.claude/settings.json (gateway URL, token, proxy), set this to true to pass
 # just that block to the runs.
 settings_env = false
+# Check that the command line is logged in before using it (claude auth status); a backend that is not logged
+# in counts as unavailable, so the next one in the role's list takes over.
+check_login = true
 
 [backends.codex]
+check_login = true      # `codex login status` before use; not logged in = unavailable
 command = "codex"
 model = ""            # empty: the model named in your own Codex config
 effort = "high"

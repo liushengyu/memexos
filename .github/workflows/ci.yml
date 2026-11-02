@@ -103,6 +103,23 @@ jobs:
           cat "$HOME"/.local/state/memexos/*/evals/retrieval/*/report.md >> "$GITHUB_STEP_SUMMARY"
           exit $status
 
+  cli-contract:
+    name: real CLI flags
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: install the real Claude Code and Codex command lines (no login needed for this check)
+        run: npm install -g @anthropic-ai/claude-code @openai/codex
+      - run: uv sync --extra dev
+      - name: every flag MemexOS passes must exist in the current releases
+        env:
+          MEMEX_REAL_CLI: "1"
+        run: uv run pytest -q tests/test_cli_flags.py
+
   install:
     name: install.sh (${{ matrix.os }})
     strategy:
@@ -123,7 +140,7 @@ jobs:
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [lint, test, leak-scan, package, eval, install]
+    needs: [lint, test, leak-scan, package, eval, install, cli-contract]
     runs-on: ubuntu-latest
     steps:
       - name: every job passed

@@ -20,6 +20,8 @@ next = """
   memex schedule install    让采集、编译、建索引自动运行"""
 
 [backend]
+not_logged_in = "`{cmd}` 已安装但没有登录：先运行一次 `{login}`"
+settings_env_hint = "（你的 Claude Code 登录写在 ~/.claude/settings.json 的 env 里；把 [backends.claude-code] settings_env 设为 true，无人值守时才用得上。）"
 cmd_missing = "找不到命令 `{cmd}`"
 no_sdk = "没装 anthropic 包（uv tool install --with anthropic memexos，或 pip install \"memexos[anthropic]\"）"
 no_key = "环境变量 ${env} 和系统钥匙串里都没有 API 密钥（memex secret set {env}）"

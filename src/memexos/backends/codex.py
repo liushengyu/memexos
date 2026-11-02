@@ -21,7 +21,7 @@ import tomllib
 from pathlib import Path
 
 from memexos import i18n
-from memexos.backends.base import NETWORK_RE, QUOTA_RE, Backend, Policy, Result
+from memexos.backends.base import LOGIN_TTL, NETWORK_RE, QUOTA_RE, READ_ONLY_NOTE, Backend, Policy, Result
 from memexos.util import proxy_env, run, which
 
 
@@ -76,12 +76,29 @@ def user_config(home: str) -> dict:
 
 class Codex(Backend):
     name = "codex"
+    _login: dict = {}
 
     def exe(self) -> str | None:
         return which(self.section.get("command") or "codex")
 
     def available(self) -> tuple[bool, str]:
-        return (True, "") if self.exe() else (False, i18n.t("backend.cmd_missing", cmd=self.section.get("command") or "codex"))
+        exe = self.exe()
+        if not exe:
+            return False, i18n.t("backend.cmd_missing", cmd=self.section.get("command") or "codex")
+        if self.section.get("check_login", True) is False:
+            return True, ""
+        hit = Codex._login.get(exe)
+        if hit and hit[1] and time.time() - hit[0] < LOGIN_TTL:
+            return True, ""
+        try:
+            r = run([exe, "login", "status"], env=proxy_env(None, _proxy(self.section)), timeout=30)
+            out = (r.stdout + r.stderr).lower()
+            ok = r.returncode == 0 and "not logged in" not in out
+        except Exception:  # noqa: BLE001 — cannot tell; let the run itself report
+            ok = True
+        why = "" if ok else i18n.t("backend.not_logged_in", cmd="codex", login="codex login")
+        Codex._login[exe] = (time.time(), ok, why)
+        return ok, why
 
     def isolated(self) -> bool:
         uc = user_config(str(codex_home()))
@@ -158,7 +175,9 @@ class Codex(Backend):
         extra_args = ["--output-schema", str(sp)]
         for im in images:
             extra_args += ["-i", str(im)]
-        return self._run(self._cmd("read-only", Path(cwd), effort, extra_args), prompt, workdir, timeout, schema)
+        # the same prompt every backend gets: the read-only note and whatever the caller computed for it (a git diff…)
+        text = prompt + READ_ONLY_NOTE.get(i18n.language(), READ_ONLY_NOTE["en"]) + (("\n" + extra) if extra else "")
+        return self._run(self._cmd("read-only", Path(cwd), effort, extra_args), text, workdir, timeout, schema)
 
     def agent(self, prompt, *, cwd, workdir, policy: Policy, effort="high", timeout=3600, schema=None, images=()):
         workdir = Path(workdir)
@@ -170,6 +189,9 @@ class Codex(Backend):
             d = p if p.is_dir() or not p.suffix else p.parent
             if d != cwd and cwd not in d.parents:
                 extra += ["--add-dir", str(d)]
+        # workspace-write also lets Codex write to $TMPDIR and /tmp unless told otherwise; only cwd and the policy's
+        # folders are meant to be writable (found by tests/test_cli_live.py)
+        extra += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true", "-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
         if policy.web or policy.network:
             extra += ["-c", "sandbox_workspace_write.network_access=true"]
         if policy.web:

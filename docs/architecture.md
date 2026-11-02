@@ -340,9 +340,23 @@ any model that supports tool calling can compile; answers are checked against th
 reformatted in one extra turn if needed. Smaller local models are fine for the worker and judge roles; writing and
 reviewing need a strong model.
 
-A backend that runs out of quota is skipped for a while and the next one takes over. Agent runs get an explicit
-policy: writable paths, readable paths, allowed command prefixes, network on or off, paths never to read. Codex runs
-do not load your personal Codex configuration; Claude Code runs load no MCP servers and no user settings.
+A backend counts as available only when its command line is installed **and logged in** (`claude auth status`,
+`codex login status`, checked before use); one that is not, or that runs out of quota, is skipped and the next one in
+the role's list takes over. Agent runs get an explicit policy: writable paths, readable paths, allowed command
+prefixes, network on or off, paths never to read.
+
+- **Claude Code** enforces the whole policy through its permission rules: reads are limited to the working folder and
+  the policy's folders, writes to the policy's paths, and credentials, cookies and browser profiles are always denied.
+  Runs load no MCP servers and no user settings.
+- **Codex** enforces writes and network through its sandbox (read-only, or workspace-write limited to the working
+  folder and the policy's folders; the temporary folders it would otherwise allow are excluded). Its sandbox does not
+  restrict reading, so for roles that read untrusted material MemexOS's defaults keep Codex read-only and offline.
+  Runs do not load your personal Codex configuration.
+
+How this is tested: `tests/test_cli_backends.py` checks the exact command lines against a stand-in tool;
+`tests/test_cli_flags.py` checks every flag against the current releases of both tools (a CI job installs them);
+`tests/test_cli_live.py` (`MEMEX_LIVE=1`) makes real calls with the logged-in tools and verifies that reading and
+writing outside the allowed folders is refused.
 
 The judge (`[judge] backend`) answers many small yes/no and multiple-choice questions: is this sentence supported by
 the source, which category fits, is this search result relevant. `llm` (default) sends them in batches to the judge

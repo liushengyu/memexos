@@ -48,8 +48,10 @@ HOME=/tmp/memex-demo/home PATH=/tmp/memex-demo/bin:$PATH uv run memex console se
 
 ## What a good pull request has
 
-- **Tests** for new behaviour and for the bug being fixed. Tests must not call real models or the network; the
-  existing tests show how to script a backend.
+- **Tests** for new behaviour and for the bug being fixed. Regular tests must not call real models or the network;
+  `tests/fakes/fake_cli.py` stands in for the `claude` and `codex` command lines. Changes to how MemexOS calls those
+  tools also need `MEMEX_LIVE=1 uv run pytest -q tests/test_cli_live.py` run once with both tools logged in (a few cents of
+  model use); say in the pull request that you did.
 - **Both languages.** Every message a person reads comes from the language packs: add new keys to
   `src/memexos/locale/en.toml` and `zh.toml`, and new prompts to `prompts/en` and `prompts/zh`.
 - **No personal data.** No real paths, names, tokens or knowledge-base content in code, tests, docs or screenshots.
