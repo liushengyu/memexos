@@ -316,6 +316,8 @@ MemexOS 本身免费，花钱的是模型调用，而且只有按次付费时才
 - [测评](docs/evals.md)：检索质量和审校校准
 - [控制台](docs/console.md)：数据从哪来、安全、设计
 - [安装提示词](docs/install-prompt.md)：让 Agent 替你安装和设置
+- [参与贡献](CONTRIBUTING.md)：改动怎么合入、开发环境、CI 查什么
+- [安全策略](SECURITY.md)：怎么私下报告安全问题
 
 （文档目前是英文。）
 

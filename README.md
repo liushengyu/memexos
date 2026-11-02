@@ -324,6 +324,8 @@ The interface, rules, prompts and logs come in English and Chinese (`memex init 
 - [Evaluations](docs/evals.md): retrieval quality and review calibration
 - [Console](docs/console.md): where its data comes from, safety, design
 - [Install prompt](docs/install-prompt.md): let an agent install and set it up
+- [Contributing](CONTRIBUTING.md): how changes get in, development setup, what CI checks
+- [Security policy](SECURITY.md): how to report a vulnerability privately
 
 ## Contributing
 
