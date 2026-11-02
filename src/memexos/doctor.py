@@ -55,7 +55,9 @@ def checks(cfg) -> list[dict]:
             label = i18n.t("doctor.backend_api", name=name, env=b.section.get("api_key_env") or "ANTHROPIC_API_KEY")
         if s["exhausted"]:
             label += i18n.t("doctor.quota", at=s["exhausted"].get("at_str"))
-        why = hint("claude" if kind == "claude-code" else "codex") if kind in ("claude-code", "codex") else s["why"]
+        # a command line that is missing gets the install hint; one that is installed gets the actual reason (not logged in…)
+        missing_cli = kind in ("claude-code", "codex") and not b.exe()
+        why = hint("claude" if kind == "claude-code" else "codex") if missing_cli else s["why"]
         add(models, label, s["available"], False, why if not s["available"] else "")
     for role, required in (("writer", True), ("reviewer", True), ("worker", True), ("vision", False)):
         ch = backends.chain(cfg, role)
