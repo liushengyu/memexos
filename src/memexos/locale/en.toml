@@ -614,6 +614,9 @@ inbox_line = "{decide} waiting for your decision · {waiting} decided, not yet c
 log = "log: {path}"
 
 [eval]
+bad_threshold = "not a threshold: {part} (use metric=value; metrics: hit1, hit3, hit10, recall10, mrr)"
+below_threshold = "below threshold: {mode} {metric} = {got} (needs {want})"
+no_metrics = "the run has no scores to check"
 g2_start = "Gate 2 calibration: {n} case(s), one review each with the reviewer models"
 g2_case = "{case}: {desc}"
 g2_incomplete = "the review did not finish: {why}"

@@ -302,7 +302,6 @@ def l1_modes(cfg) -> list[str]:
 
 
 def l1(cfg, modes: list[str] | None = None, limit: int | None = None) -> Path:
-    from memexos.search import engine
     modes = modes or l1_modes(cfg)
     items = [it for it in bank(cfg) if it["answerable"] and not it["stale"]][:limit]
     d = new_run(cfg)
@@ -363,10 +362,11 @@ def report(cfg, d: Path) -> Path:
     name = lambda m: i18n.t(f"eval.mode_{m}") if i18n.has(f"eval.mode_{m}") else m   # noqa: E731
     L = [i18n.t("eval.l1_title", run=d.name), "", i18n.t("eval.l1_intro", n=data["n"]), "", "## " + i18n.t("eval.overall"), "",
          "| " + " | ".join(i18n.t("eval.cols")) + " |", "|---|---|---|---|---|---|---|---|"]
-    summary = []
+    summary, metrics = [], {}
     for m in data["modes"]:
         s = summarize(rows, m)
         if s:
+            metrics[m] = {k: round(s[k], 3) for k in ("hit1", "hit3", "hit10", "recall10", "mrr")}
             L.append(f"| {name(m)} | {pct(s['hit1'])} | {pct(s['hit3'])} | {pct(s['hit10'])} | {pct(s['recall10'])} | "
                      f"{s['mrr']:.2f} | {s['secs']:.2f}s | {s['errors']} |")
             summary.append([name(m), round(s["hit1"], 3), round(s["hit3"], 3), round(s["hit10"], 3), round(s["mrr"], 3)])
@@ -389,7 +389,7 @@ def report(cfg, d: Path) -> Path:
               f"  - {i18n.t('eval.got')}: {', '.join(top[:3]) or '-'}"]
     L += ["", i18n.t("eval.miss_count", n=len(misses))]
     atomic_write(d / "report.md", "\n".join(L) + "\n")
-    atomic_write(d / "summary.json", json.dumps({"run": d.name, "questions": data["n"], "rows": summary,
+    atomic_write(d / "summary.json", json.dumps({"run": d.name, "questions": data["n"], "rows": summary, "metrics": metrics,
                                                  "judged": bool(load_qrels(cfg))}, ensure_ascii=False))
     return d / "report.md"
 
@@ -556,7 +556,7 @@ def l2_report(cfg, d: Path) -> Path:
         cnt = collections.Counter(x["verdict"] for x in vs)
         neg = sum(1 for r in rs if not items.get(r["id"], {}).get("answerable", True))
         pos = len(rs) - neg
-        frac = lambda k, base: f"{cnt[k]}/{base}" if base else "—"   # noqa: E731
+        frac = lambda k, base, cnt=cnt: f"{cnt[k]}/{base}" if base else "—"
         L.append(f"| {ag} | {frac('correct', pos)} | {frac('partial', pos)} | {frac('wrong', pos)} | {frac('honest_gap', neg)} | "
                  f"{frac('false_gap', pos)} | {frac('invented', neg)} | {sum(r['used_kb'] for r in rs)}/{len(rs)} | "
                  f"{sum(r['found_gold'] for r in rs if items.get(r['id'], {}).get('answerable', True))}/{pos} | "
@@ -591,6 +591,25 @@ def status(cfg) -> str:
 
 
 # ---------------------------------------------------------------- CLI
+def check_thresholds(d: Path, spec: str) -> int:
+    """1 when any mode of an L1 run scores below a threshold ("hit3=0.9,mrr=0.8"), printing what failed."""
+    want = {}
+    for part in filter(None, (x.strip() for x in spec.split(","))):
+        k, _, v = part.partition("=")
+        if k not in ("hit1", "hit3", "hit10", "recall10", "mrr") or not v:
+            print(i18n.t("eval.bad_threshold", part=part), file=sys.stderr)
+            return 2
+        want[k] = float(v)
+    metrics = json.loads((d / "summary.json").read_text(encoding="utf-8")).get("metrics") or {}
+    failed = [(m, k, got[k], v) for m, got in metrics.items() for k, v in want.items() if got.get(k, 0) < v]
+    for m, k, got, v in failed:
+        print(i18n.t("eval.below_threshold", mode=m, metric=k, got=got, want=v), file=sys.stderr)
+    if not metrics:
+        print(i18n.t("eval.no_metrics"), file=sys.stderr)
+        return 1
+    return 1 if failed else 0
+
+
 def cmd(cfg, argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="memex eval retrieval")
     ap.add_argument("action", choices=["mine", "gen", "cover", "usage", "verify", "l1", "pool", "l2", "grade", "report", "status"])
@@ -600,6 +619,9 @@ def cmd(cfg, argv: list[str]) -> int:
     ap.add_argument("--modes", help="l1: comma-separated search modes")
     ap.add_argument("--agents", help="l2: comma-separated backends, e.g. claude-code,codex")
     ap.add_argument("--same-as", help="l2: reuse the questions of an earlier run directory")
+    ap.add_argument("--fail-under", metavar="METRIC=VALUE,...",
+                    help="l1: exit with status 1 when any search mode scores below these, e.g. hit3=0.9,mrr=0.8 "
+                         "(metrics: hit1, hit3, hit10, recall10, mrr); for CI")
     a = ap.parse_args(argv)
     run_dir = Path(a.run).expanduser() if a.run else None
     if a.action == "status":
@@ -626,6 +648,8 @@ def cmd(cfg, argv: list[str]) -> int:
         elif a.action == "l1":
             d = l1(cfg, a.modes.split(",") if a.modes else None, a.limit)
             print(d / "report.md")
+            if a.fail_under:
+                return check_thresholds(d, a.fail_under)
         elif a.action == "pool":
             print(i18n.t("eval.judged", n=pool(cfg)))
         elif a.action == "l2":

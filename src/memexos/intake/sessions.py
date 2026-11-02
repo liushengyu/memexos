@@ -269,7 +269,7 @@ def list_sessions(cfg, since_days: float = 30, idle_hours: float = 6, source: st
             if turns:
                 rows.append((mt, key, meta, turns))
     out = []
-    for mt, key, meta, turns in sorted(rows, key=lambda r: r[0]):
+    for _mt, key, meta, turns in sorted(rows, key=lambda r: r[0]):
         chars = sum(len(t["user"]) + sum(len(x[1]) if x[0] == "say" else 120 for x in t["items"]) for t in turns)
         out.append({"key": key, "cwd": tilde(meta["cwd"]), "first": meta["first"], "last": meta["last"], "title": meta["title"],
                     "turns": len(turns), "approx_chars": chars, "first_user_msg": short(turns[0]["user"], 160)})

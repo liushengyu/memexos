@@ -162,3 +162,14 @@ def test_youtube_collects_new_videos_until_it_meets_seen_ones(home, monkeypatch)
     lists["LL"].insert(0, {"id": "new"})
     second = youtube.collect(c, state, set(), 30)
     assert [i["key"] for i in second[0]] == ["youtube:new"]            # stops at the first video seen before
+
+
+def test_l1_fail_under(home, tmp_path):
+    import json as _json
+    from memexos.evals import retrieval
+    d = tmp_path / "run"
+    d.mkdir()
+    (d / "summary.json").write_text(_json.dumps({"metrics": {"fts": {"hit1": 0.75, "hit3": 1.0, "hit10": 1.0, "recall10": 1.0, "mrr": 0.875}}}))
+    assert retrieval.check_thresholds(d, "hit3=0.9,mrr=0.8") == 0
+    assert retrieval.check_thresholds(d, "hit1=0.8") == 1
+    assert retrieval.check_thresholds(d, "nonsense=1") == 2

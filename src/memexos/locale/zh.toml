@@ -611,6 +611,9 @@ inbox_line = "等你决定 {decide} 件 · 已决定等执行 {waiting} 件 · A
 log = "日志：{path}"
 
 [eval]
+bad_threshold = "看不懂这个门槛：{part}（写成 指标=数值；指标有 hit1、hit3、hit10、recall10、mrr）"
+below_threshold = "没达标：{mode} 的 {metric} = {got}（要求至少 {want}）"
+no_metrics = "这次运行没有可检查的分数"
 g2_start = "门 2 校准：{n} 个用例，每个用审校模型跑一次审校"
 g2_case = "{case}：{desc}"
 g2_incomplete = "审校没跑完：{why}"

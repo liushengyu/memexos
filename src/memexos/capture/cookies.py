@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -64,12 +63,12 @@ def export(cfg, site: str) -> int:
     except ImportError:
         py = _ytdlp_python()
         if not py:
-            raise RuntimeError(i18n.t("cookies.no_ytdlp"))
+            raise RuntimeError(i18n.t("cookies.no_ytdlp")) from None
         env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(Path(__file__).resolve().parents[2]), os.environ.get("PYTHONPATH")]))}
         r = subprocess.run([py, "-m", "memexos.capture.cookies", "_export", site, browser(cfg, site), str(path(cfg, site))],
                            capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL)
         if r.returncode != 0:
-            raise RuntimeError((r.stderr or r.stdout).strip()[-300:])
+            raise RuntimeError((r.stderr or r.stdout).strip()[-300:]) from None
         return int(r.stdout.strip() or 0)
     return _export(site, browser(cfg, site), path(cfg, site), extract_cookies_from_browser)
 

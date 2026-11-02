@@ -1,0 +1,33 @@
+name: Bug report
+description: Something does not work as described
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. memex init --sample
+        2. memex search "…"
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `memex doctor`
+      description: Remove anything personal (paths, names) before pasting.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version and system
+      placeholder: "memex 0.1.0.dev0, macOS 15 / Ubuntu 24.04, Python 3.12"
+    validations:
+      required: true

@@ -1,9 +1,42 @@
-# MemexOS
+<div align="center">
 
-**给你和你的 Agent 用的记忆系统。** MemexOS 从你读过、看过、收藏过、和 AI Agent 讨论过的东西里自己学习，把它们整理成
-经过审校、互相链接的 wiki，任何 Agent 都能检索。你和 Agent 学到的东西，不会因为一次对话结束就丢掉。
+<img src="docs/images/logo-banner.jpg" alt="MemexOS" width="720">
 
-[English](README.md)
+# 给你和你的 Agent 用的记忆系统
+
+**你读过、看过、收藏过、和 AI Agent 讨论过的东西，变成一个经过审校、互相链接、任何 Agent 都能检索的 wiki。
+你和 Agent 学到的东西，不会因为一次对话结束就丢掉。**
+
+[![CI](https://github.com/liushengyu/memexos/actions/workflows/ci.yml/badge.svg)](https://github.com/liushengyu/memexos/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-e7c792?style=flat-square)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-5b8cff?style=flat-square)](pyproject.toml)
+[![Works with Claude Code, Codex and any agent](https://img.shields.io/badge/works_with-Claude_Code_·_Codex_·_any_agent-5b8cff?style=flat-square)](#让你的-agent-用上这份记忆)
+[![Stars](https://img.shields.io/github/stars/liushengyu/memexos?style=flat-square&color=e7c792&label=stars)](https://github.com/liushengyu/memexos/stargazers)
+
+[安装](#安装) · [它是怎么工作的](#它是怎么工作的) · [模型怎么配](#模型怎么配) · [架构](docs/architecture.md) · [参与贡献](CONTRIBUTING.md) · [English](README.md)
+
+</div>
+
+## 从一个想法到一套系统
+
+MemexOS 的起点是 Andrej Karpathy 提出的 [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)：
+不要每次提问都回到原始文档里重新检索，而是让语言模型把每份来源读一遍，**编译**成一个长期保存、互相链接的 markdown
+wiki，配一份目录（index）和一份日志（log），并用三种操作维护它：收录（ingest）、查询（query）、体检（lint）。原文的
+说法是，wiki 是“一个持续积累、越用越值钱的成果”。人之所以放弃自己的 wiki，是因为记账的工作量比收获涨得快，而记账
+恰恰是模型不会厌烦的事。
+
+我们接过这个想法，追问一个问题：要让它替一个人和他用的所有 Agent 自己跑上几个月，而且内容不和来源越走越远，
+还需要什么？MemexOS 就是我们的回答：
+
+| LLM Wiki 的想法 | MemexOS 在它之上做了什么 |
+|---|---|
+| 原始来源保持不变 | `raw/` 只增不改；每个页面都列出它依据的来源；措辞跟着证据强度走 |
+| 由模型来写、来维护 wiki | 编写 Agent 在暂存副本里编译；程序检查、自查、另一家模型的独立审校，挡在草稿和 wiki 之间 |
+| 由人挑选来源 | 采集器每晚去你本来就会收藏东西的地方收（YouTube、B 站、X、RSS、链接），再加上你和 Agent 一起得出的结论；准入 Agent 只留值得留的 |
+| 收录、查询、体检 | `memex ingest`；任何 Agent 都能用的 `memex search`、`memex get`；每周体检；再加上根据 Agent 实际使用情况做的更正 |
+| 一份规则文件指导模型 | `AGENTS.md` 规则、随你兴趣生长的分类、只留给你拍板的收件箱、每一步都看得见的控制台 |
+
+名字取自 Vannevar Bush 1945 年设想的 *memex*：一张能存下并链接主人读过的一切的书桌。
 
 ![MemexOS 控制台：流水线环里的知识球、实时事件、Agent 最近问了什么、运行时间带](docs/images/console-overview-zh.jpg)
 
@@ -99,26 +132,6 @@ flowchart TB
 
 不过两道检查，任何内容都进不了 `wiki/`。门 1 是程序，不是模型；门 2 用的是和编写模型不同的另一家模型，这样编写模型
 自己看不出的错，不会再被同样的盲点放过去。
-
-## 灵感和指导思想
-
-MemexOS 的出发点是 Andrej Karpathy 提出的 [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
-思路：不是每次提问都去原始文档里重新检索，而是让语言模型把每份来源读一遍，**编译**成一个长期保存、互相链接的
-markdown wiki，配一份目录（index）和一份日志（log），并用三种操作维护它：收录（ingest）、查询（query）、体检
-（lint）。原始来源保持原样不改；wiki 完全由模型来写；一份规则文件（`AGENTS.md`）告诉模型该怎么做。原文的说法是，
-wiki 是“一个持续积累、越用越值钱的成果”：人之所以放弃自己的 wiki，是因为记账的工作量比收获涨得快，而记账恰恰是
-模型不会厌烦的事。
-
-名字取自 Vannevar Bush 1945 年设想的 *memex*：一张能存下并链接主人读过的一切的书桌。
-
-在这个思路之上，MemexOS 加入了我们自己的理解和设计，目标是让它能无人值守地跑上几个月，而 wiki 不会和来源越走越远：
-
-- **先保证可信，再追求规模**：暂存副本、两道检查、来自另一家模型的独立审校；措辞跟着证据强度走（“据……转述”、
-  “作者认为……”）。
-- **收集不费力**：在你本来就会收藏东西的地方装上采集器，再加上你自己的 Agent 会话；中间有一道准入，让 wiki 增长的是
-  有用的信息而不是噪音。
-- **反馈闭环**：统计 Agent 的真实使用，反过来驱动更正；用题库测检索质量；系统自己的毛病也进收件箱。
-- **运行过程看得见**：每个命令都写结构化的事件记录；控制台、`memex status` 和各项测评都是从这份记录里算出来的。
 
 ## 安装
 
@@ -305,6 +318,12 @@ MemexOS 本身免费，花钱的是模型调用，而且只有按次付费时才
 - [安装提示词](docs/install-prompt.md)：让 Agent 替你安装和设置
 
 （文档目前是英文。）
+
+## 参与贡献
+
+欢迎参与。`main` 分支受保护：包括维护者在内，任何改动都要走拉取请求（pull request），必须通过 CI（Linux 和 macOS
+上的测试、代码检查、泄漏扫描、从零安装、检索测评）；外部贡献者的改动还要维护者审核通过。先看
+[CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私下报告。
 
 ## 状态
 

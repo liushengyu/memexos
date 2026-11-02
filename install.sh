@@ -5,7 +5,7 @@
 #   sh install.sh [--yes] [--minimal] [--no-setup]
 #
 #   --yes        accept every default without asking
-#   --minimal    MemexOS, Node.js and qmd only: no model downloads, no video or PDF tools
+#   --minimal    MemexOS, Node.js and qmd only: no model downloads, no video or PDF tools, no model command lines
 #   --no-setup   stop before `memex setup`
 #
 # It asks before each step (unless --yes), skips what is already installed, and can be run again at any time:
@@ -290,7 +290,7 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then add_found "ANTHROPIC_API_KEY"; fi
 if [ -n "${OPENAI_API_KEY:-}" ]; then add_found "OPENAI_API_KEY"; fi
 if curl -fs --max-time 2 --noproxy '*' http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then add_found "Ollama (local models)"; fi
 if [ -n "$found" ]; then ok "found: $found"; fi
-if ! has claude || ! has codex; then
+if [ "$MINIMAL" = 0 ] && { ! has claude || ! has codex; }; then
   info "Two different model families work best: one writes, the other reviews. Install a command line now?"
   def=skip
   [ -z "$found" ] && def=claude

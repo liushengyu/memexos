@@ -37,7 +37,7 @@ def test_state_dirs_are_per_vault(home):
 
 def test_init_creates_skeleton_and_commits(home):
     vault = home / "memex"
-    lines = scaffold.init(vault, lang="en")
+    scaffold.init(vault, lang="en")
     for rel in ["AGENTS.md", "CLAUDE.md", "index.md", "log.md", ".gitattributes", ".memex/taxonomy.md", "raw/feedback",
                 "wiki/sources", "inbox"]:
         assert (vault / rel).exists(), rel

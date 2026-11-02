@@ -139,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
             cfg = config_mod.load(vault)
         except config_mod.ConfigError as e:
             print(f"memex: {e}", file=sys.stderr)
-            raise SystemExit(2)
+            raise SystemExit(2) from None
         i18n.set_language(cfg.language)
         from memexos import events
         events.configure(cfg)

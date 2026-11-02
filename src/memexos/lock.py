@@ -37,7 +37,7 @@ def held(locks_dir: Path, name: str, wait: float = 0.0, poll: float = 15.0):
                 break
             except BlockingIOError:
                 if time.time() >= deadline:
-                    raise Busy(name)
+                    raise Busy(name) from None
                 want.touch()
                 time.sleep(min(poll, max(0.05, deadline - time.time())))
         want.unlink(missing_ok=True)

@@ -37,3 +37,17 @@ packages = ["src/memexos"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+
+[tool.ruff.lint]
+# Bug-finding rules only: syntax and import errors, undefined or unused names, likely bugs (bugbear).
+# Formatting and style are left to the code's own conventions.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = [
+  "E741",  # single-letter names such as `l` for a line are used deliberately in short comprehensions
+  "E731",  # small named lambdas are used for local formatting helpers
+  "B905",  # zip() over sequences built to the same length
+]

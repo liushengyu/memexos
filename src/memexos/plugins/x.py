@@ -8,11 +8,10 @@ Needs twitter-cli (https://github.com/jackwener/twitter-cli, Apache-2.0) and a l
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 
-from memexos import i18n, rawfile
+from memexos import i18n
 from memexos.capture import cookies
 from memexos.capture.fetch import PageUnavailable, proxy_for
 from memexos.util import proxy_env, run, which

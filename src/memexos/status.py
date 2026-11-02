@@ -7,13 +7,11 @@ The console uses snapshot() for the same data.
 from __future__ import annotations
 
 import argparse
-import collections
 import json
 import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 from memexos import backends, events, i18n, runs
 from memexos.pipeline.stage import ledger, pending_raw

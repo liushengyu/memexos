@@ -23,8 +23,6 @@ import json
 import os
 import re
 import shlex
-import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -467,11 +465,9 @@ def cmd_usage(loader, argv: list[str]) -> int:
     if a.action == "extract":
         print(i18n.t("usage.extracted", **dict(zip(("scanned", "new", "total"), extract(cfg)))))
     elif a.action == "judge":
-        from memexos import events
         with event_log.run(cfg.paths.state, "usage"):
             print(i18n.t("usage.judge_done", n=judge_usage(cfg, a.max or 40)))
     elif a.action == "verify":
-        from memexos import events
         with event_log.run(cfg.paths.state, "usage"):
             print(i18n.t("usage.verify_done", n=verify(cfg, a.max or 10)))
     else:

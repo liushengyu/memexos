@@ -1,0 +1,134 @@
+# Every pull request and every change to main runs these jobs. The branch rules for main require the
+# "ci-ok" job, which passes only when all the others passed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - name: ruff (bug-finding rules, see pyproject.toml)
+        run: uvx ruff check src tests tools
+      - name: shellcheck the installer and the git hook
+        run: shellcheck -s sh -S warning install.sh .githooks/pre-commit
+      - name: console scripts parse
+        run: for f in $(find src/memexos/console/static -name '*.js'); do node --check "$f"; done
+
+  test:
+    name: test (${{ matrix.os }}, Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: macos-latest
+            python: "3.12"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --extra dev
+      - run: uv run pytest -q
+
+  leak-scan:
+    name: leak scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: secrets and machine-specific details in tracked files
+        run: python3 tools/leak_scan.py --all
+      - name: gitleaks over the whole history
+        env:
+          GITLEAKS_VERSION: "8.28.0"
+        run: |
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks git --no-banner --redact --exit-code 1 .
+
+  package:
+    name: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - name: install the wheel in a clean home and use it
+        run: |
+          wheel="$(ls "$GITHUB_WORKSPACE"/dist/*.whl)"
+          export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"
+          uv tool install "$wheel"
+          export PATH="$HOME/.local/bin:$PATH"
+          memex --version
+          memex init --sample
+          memex search "how often should I review flashcards" | head -20
+          memex get "Spaced repetition" | head -5
+
+  eval:
+    name: retrieval eval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - name: the sample knowledge base must keep finding the right pages
+        env:
+          MEMEX_SEARCH__BACKEND: fts
+        run: |
+          memex="$GITHUB_WORKSPACE/.venv/bin/memex"
+          export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"
+          "$memex" init --sample
+          set +e
+          "$memex" eval retrieval l1 --fail-under hit3=0.9,mrr=0.8
+          status=$?
+          set -e
+          cat "$HOME"/.local/state/memexos/*/evals/retrieval/*/report.md >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+  install:
+    name: install.sh (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: install from scratch in a fresh home (no model downloads)
+        run: |
+          export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"
+          MEMEX_SOURCE="$GITHUB_WORKSPACE" sh install.sh --yes --minimal --no-setup
+          export PATH="$HOME/.local/bin:$PATH"
+          memex --version
+          qmd --version
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [lint, test, leak-scan, package, eval, install]
+    runs-on: ubuntu-latest
+    steps:
+      - name: every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = success ] || exit 1; done

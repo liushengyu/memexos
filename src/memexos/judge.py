@@ -22,7 +22,6 @@ import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from memexos import credentials, events, i18n, net
 
@@ -208,7 +207,7 @@ class JevJudge:
                 if e.status in (401, 402, 403):
                     meter.add(0, ok=False)
                     JevJudge.down = i18n.t(f"judge.jev_{e.status}")
-                    raise JudgeUnavailable(JevJudge.down)
+                    raise JudgeUnavailable(JevJudge.down) from e
                 time.sleep(2 * (attempt + 1))
             except Exception:  # noqa: BLE001 — bad answers or network trouble: retry, then give up on this one call
                 time.sleep(2 * (attempt + 1))

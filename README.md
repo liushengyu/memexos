@@ -1,10 +1,43 @@
-# MemexOS
+<div align="center">
 
-**A memory OS for you and your agents.** MemexOS learns on its own from what you read, watch, save and discuss with
-your AI agents, and turns it into a reviewed, linked wiki that any agent can search, so nothing you or your agents
-learn is lost when a conversation ends.
+<img src="docs/images/logo-banner.jpg" alt="MemexOS" width="720">
 
-[中文说明](README.zh-CN.md)
+# A memory OS for you and your agents
+
+**What you read, watch, save and discuss with your AI agents becomes a reviewed, linked wiki that any agent can
+search. Nothing you or your agents learn is lost when a conversation ends.**
+
+[![CI](https://github.com/liushengyu/memexos/actions/workflows/ci.yml/badge.svg)](https://github.com/liushengyu/memexos/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-e7c792?style=flat-square)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-5b8cff?style=flat-square)](pyproject.toml)
+[![Works with Claude Code, Codex and any agent](https://img.shields.io/badge/works_with-Claude_Code_·_Codex_·_any_agent-5b8cff?style=flat-square)](#give-your-agents-the-memory)
+[![Stars](https://img.shields.io/github/stars/liushengyu/memexos?style=flat-square&color=e7c792&label=stars)](https://github.com/liushengyu/memexos/stargazers)
+
+[Install](#install) · [How it works](#how-it-works) · [Models](#models) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md) · [中文](README.zh-CN.md)
+
+</div>
+
+## From an idea to a system
+
+MemexOS grew out of Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
+instead of searching raw documents again for every question, let a language model read each source once and
+*compile* it into a persistent wiki of linked markdown pages, keep an index and a log, and maintain the wiki with three
+operations: ingest, query and lint. In the gist's words, "the wiki is a persistent, compounding artifact". People
+abandon wikis because the bookkeeping grows faster than the value, and bookkeeping is exactly what a model does not
+get tired of.
+
+We took the idea and asked what it needs to run by itself for months, for one person and every agent they use,
+without drifting from its sources. MemexOS is our answer:
+
+| The LLM Wiki idea | What MemexOS builds on it |
+|---|---|
+| Raw sources stay unchanged | `raw/` is append-only; every page lists the sources it rests on; claims are worded by the strength of their evidence |
+| The model writes and maintains the wiki | A writer agent compiles in a staging copy; program checks, a self-check and an independent reviewer from another model family stand between a draft and the wiki |
+| You curate the sources | Collectors gather what you already save (YouTube, Bilibili, X, RSS, links) and what you work out with your agents, every night; an admission agent keeps what is worth keeping |
+| Ingest, query, lint | `memex ingest`; `memex search` and `memex get` for any agent; a weekly lint; and fixes driven by how agents actually use the knowledge |
+| A schema file guides the model | `AGENTS.md` rules, a taxonomy that grows with your interests, an inbox for what only you can decide, and a console that shows every step |
+
+The name comes from Vannevar Bush's 1945 *memex*, a desk that would store and link everything its owner read.
 
 ![The MemexOS console: the knowledge globe inside the pipeline ring, live events, agents' questions and the run timeline](docs/images/console-overview.jpg)
 
@@ -103,29 +136,6 @@ flowchart TB
 
 Nothing reaches `wiki/` without passing both gates. Gate 1 is code, not a model; gate 2 is a different model family
 from the writer, so the writer's blind spots are not reviewed by the same blind spots.
-
-## Where the idea comes from
-
-MemexOS starts from Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
-idea: instead of retrieving raw documents for every question, a language model reads each source once, *compiles* it
-into a persistent wiki of linked markdown pages, keeps an index and a log, and maintains the wiki with three operations
-(ingest, query, lint). Raw sources stay unchanged; the model owns the wiki; a schema file (`AGENTS.md`) tells it how.
-In the gist's words, "the wiki is a persistent, compounding artifact": people abandon wikis because the bookkeeping
-grows faster than the value, and bookkeeping is exactly what a model does not get tired of.
-
-The name comes from Vannevar Bush's 1945 *memex*, a desk that would store and link everything its owner read.
-
-What MemexOS adds is our own design for running that idea unattended, for months, without the wiki drifting from its
-sources:
-
-- **Trust before scale**: staging copies, two gates and an independent reviewer from a different model family;
-  wording that follows the evidence ("according to …", "the author thinks …").
-- **Input without effort**: collectors for the places you already save things, plus your own agent sessions, with an
-  admission step so the wiki grows with signal, not noise.
-- **A feedback loop**: agents' real use is measured and fed back into fixes; retrieval is evaluated against a
-  question bank; the system's own problems go to an inbox.
-- **Operations you can see**: every command writes a structured event log; the console, `memex status` and the
-  evaluations are views over it.
 
 ## Install
 
@@ -314,6 +324,13 @@ The interface, rules, prompts and logs come in English and Chinese (`memex init 
 - [Evaluations](docs/evals.md): retrieval quality and review calibration
 - [Console](docs/console.md): where its data comes from, safety, design
 - [Install prompt](docs/install-prompt.md): let an agent install and set it up
+
+## Contributing
+
+Contributions are welcome. `main` is protected: every change, the maintainer's included, goes through a pull request
+that must pass CI (tests on Linux and macOS, lint, the leak scan, an install from scratch and the retrieval evaluation)
+and, from outside contributors, a maintainer's review. Start with [CONTRIBUTING.md](CONTRIBUTING.md); report security
+problems privately as described in [SECURITY.md](SECURITY.md).
 
 ## Status
 

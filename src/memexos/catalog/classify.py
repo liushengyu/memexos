@@ -6,7 +6,6 @@ import argparse
 import collections
 import datetime
 import json
-import os
 import re
 import sys
 import tempfile
@@ -474,7 +473,7 @@ def check(cfg) -> list[str]:
 def retarget_secondary(cfg, tx: Taxonomy, n: dict, target: str | None) -> int:
     names = {f"{n['parent']}/{a}" for a in [n["name"]] + n["aliases"]}
     rows = []
-    for raw, r in load(cfg).items():
+    for r in load(cfg).values():
         sec = r.get("secondary") or []
         if not any(s.removeprefix(DRAFT) in names for s in sec):
             continue

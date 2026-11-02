@@ -1,6 +1,5 @@
 """End-to-end compile pipeline with scripted stand-in models: no network, no cost."""
 
-import json
 import re
 import subprocess
 from pathlib import Path

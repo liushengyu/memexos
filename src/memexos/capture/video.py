@@ -10,7 +10,6 @@ When the transcript is too thin (no narration; the information is on screen) a v
 from __future__ import annotations
 
 import argparse
-import datetime
 import json
 import re
 import sys

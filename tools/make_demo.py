@@ -176,7 +176,7 @@ class Demo:
                 srcs.append({"kind": kind, "platform": platform, "title": title.strip(), "desc": desc.strip(), "domain": dom})
             topic_title, topic_desc = spec["topic"].split(" — ", 1)
             # every concept and entity is introduced by one source of its domain and mentioned by another
-            for i, (t, d) in enumerate(concepts + entities):
+            for i, (t, _d) in enumerate(concepts + entities):
                 s = srcs[i % len(srcs)]
                 s.setdefault("introduces", []).append(t)
                 other = srcs[(i + 1) % len(srcs)]
@@ -545,7 +545,7 @@ class Demo:
         cwd = str(self.home / "projects" / "agent-lab")
         for i, (q, page) in enumerate(QUESTIONS):
             t0 = self.now - (len(QUESTIONS) - i) * 2.7 * 3600
-            stamp = lambda k: time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(t0 + k * 20))  # noqa: E731
+            stamp = lambda k, t0=t0: time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(t0 + k * 20))
             kw = " ".join(w for w in re.findall(r"[A-Za-z0-9']+", page.lower()))
             search_cmd = f'memex search "{q}" --kw "{kw}"'
             out = self.memex("search", q, "--kw", kw, check=False)

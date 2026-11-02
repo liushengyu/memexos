@@ -161,7 +161,7 @@ class _Builder:
                 u["subject"] = d.get("message", "")
 
     def finish(self, now: float) -> list[dict]:
-        for rid, rs in self.runs.items():
+        for rs in self.runs.values():
             u = rs.get("unit")
             if u and u["t1"] is None and not rs["ended"]:
                 # no run.end: the process died (pid gone), or the events came from outside a run (no pid) and stopped

@@ -1,2 +1,3 @@
-# The repository's own public address contains the owner's GitHub account name.
-github(usercontent)?\.com/liushengyu/memexos
+# The repository's own public address and its maintainer's GitHub handle (public by design).
+\bliushengyu/memexos\b
+@liushengyu\b

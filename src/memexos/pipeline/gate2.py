@@ -12,7 +12,6 @@ could not be completed (network, quota, unparseable output).
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from importlib import resources
 from pathlib import Path
