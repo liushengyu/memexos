@@ -188,7 +188,9 @@ Chinese, qmd's default embeddinggemma otherwise. All models run locally and are 
 `memex models pull`, which never deletes a model already downloaded.
 
 **A query** goes to both indexes: BM25 over the full-text index (the agent's keywords as phrases, the question as
-content words), and qmd's vector search with the question. The two ranked lists are merged by reciprocal-rank fusion
+content words), and plain vector similarity with the question through qmd's library. (`qmd vsearch` would first
+rewrite the question with a 1.7B language model; MemexOS gets that kind of help from the asking agent's keywords
+instead, and keeps qmd's query expansion for `--mode deep`.) The two ranked lists are merged by reciprocal-rank fusion
 (score = Σ 1/(60 + rank)), and the top candidates are reordered by a local reranker (Qwen3-Reranker, run through qmd's
 bundled llama.cpp) when it is downloaded. Without qmd, search uses the full-text index alone.
 ## The loop back

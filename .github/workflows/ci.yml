@@ -139,6 +139,16 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           memex --version
           qmd --version
+      - name: vector search works through qmd's library (guards against changes in qmd)
+        if: runner.os == 'Linux'
+        run: |
+          export HOME="$RUNNER_TEMP/home" PATH="$RUNNER_TEMP/home/.local/bin:$PATH"
+          memex init --sample
+          memex models pull
+          memex reindex
+          memex search "who kept a slip-box" --mode vector -n 3 | tee out.txt
+          grep -q "Luhmann\|Zettelkasten" out.txt
+          if grep -q "⚠" out.txt; then echo "vector search ran in a reduced way"; exit 1; fi
       - name: an unknown optional part is refused before anything is installed
         run: |
           if sh install.sh --yes --with nonsense 2>err.txt; then exit 1; fi

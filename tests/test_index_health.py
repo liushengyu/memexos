@@ -229,3 +229,15 @@ def test_the_shipped_default_picks_the_model_by_language(home):
 
 def test_paths_are_plain(tmp_path):
     assert isinstance(fts.damage_note(Path(tmp_path / "x.sqlite")), Path)
+
+
+def test_vector_search_uses_qmds_library_and_falls_back_to_its_command_line(vault, fake_qmd, monkeypatch):
+    calls, make_db = fake_qmd
+    cfg = config.load(vault)
+    monkeypatch.setattr(qmd, "vectors", lambda cfg, q, n: [{"path": "wiki/concepts/Page 1.md", "title": "Page 1", "snippet": ""}])
+    degraded = []
+    assert [h["path"] for h in qmd.query(cfg, "vsearch", "q", 5, degraded)] == ["wiki/concepts/Page 1.md"]
+    assert not degraded and not [c for c in calls() if "vsearch" in c]          # no query expansion
+    monkeypatch.setattr(qmd, "vectors", lambda cfg, q, n: None)
+    qmd.query(cfg, "vsearch", "q", 5, degraded)
+    assert [c for c in calls() if "vsearch" in c] and "rewrites the question" in degraded[0]

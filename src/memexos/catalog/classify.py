@@ -187,7 +187,15 @@ def view(cfg, raw: str | None = None, page: str | None = None) -> str:
                evidence=D.label("evidence", e["evidence"], lang))
     if e["provisional"]:
         s += i18n.t("catalog.provisional_note")
-    return s + (i18n.t("search.note", note=str(e["scope_note"])[:80]) if e.get("scope_note") else "")
+    return s + (i18n.t("search.note", note=short(str(e["scope_note"]))) if e.get("scope_note") else "")
+
+
+def short(text: str, n: int = 140) -> str:
+    """A note cut at a word (or, without spaces, a character) boundary, with an ellipsis when cut."""
+    if len(text) <= n:
+        return text
+    cut = text[:n]
+    return (cut.rsplit(" ", 1)[0] if " " in cut[n // 2:] else cut).rstrip(" ,;，；、") + "…"
 
 
 # ---------------------------------------------------------------- the big-model classification

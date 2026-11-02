@@ -90,8 +90,8 @@ def describe(cfg, hit: dict) -> tuple[str, str, str | None]:
                 cls = i18n.t("search.classification", domain=_fm_list(fm.get("domain")), type=_fm_list(fm.get("content_type")),
                              evidence=_fm_list(fm.get("evidence")))
                 if fm.get("use_note"):
-                    note = str(fm["use_note"])
-                    cls += i18n.t("search.note", note=note if len(note) <= 140 else note[:140].rsplit(" ", 1)[0] + "…")
+                    from memexos.catalog.classify import short
+                    cls += i18n.t("search.note", note=short(str(fm["use_note"])))
         return label, cls, None
     if p.startswith("raw/"):
         if view:
