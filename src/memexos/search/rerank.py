@@ -36,7 +36,7 @@ def passage(vault: Path, hit: dict, limit: int = 1500) -> str:
     return f"{hit.get('title') or Path(hit['path']).stem} ({hit['path']})\n{text[:limit]}\n…\nmatched: {snip[:600]}"
 
 
-def qmd_scores(query: str, texts: list[str], timeout: float = 60) -> dict[int, float] | None:
+def qmd_scores(query: str, texts: list[str], timeout: float = 60, timing: dict | None = None) -> dict[int, float] | None:
     pkg = qmd_mod.package_dir()
     node = which("node")
     if not pkg or not node:
@@ -48,6 +48,8 @@ def qmd_scores(query: str, texts: list[str], timeout: float = 60) -> dict[int, f
     try:
         r = run([node, str(script)], input=json.dumps(req, ensure_ascii=False) + "\n", env=env, timeout=timeout)
         lines = [json.loads(l) for l in r.stdout.splitlines() if l.strip()]
+        if lines and timing is not None:
+            timing.update(load_ms=lines[0].get("load_ms"), rank_ms=lines[0].get("rank_ms"))
         return {int(k): float(v) for k, v in lines[0]["scores"].items()} if lines else None
     except Exception:  # noqa: BLE001 — any failure means "no reranker"
         return None
@@ -73,15 +75,54 @@ def available(cfg) -> str:
     return "qmd" if qmd_mod.package_dir() and which("node") and qmd_mod.reranker_model() else "none"
 
 
+SPEED_FILE = "rerank-speed.json"
+
+
+def _speed(cfg) -> float | None:
+    """Seconds the local reranker last took per candidate on this machine (it varies a hundredfold: a GPU scores
+    twenty pages in a second, a CPU-only machine takes most of a minute)."""
+    try:
+        v = json.loads((cfg.paths.state / SPEED_FILE).read_text()).get("per_doc")
+        return float(v) if v else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _note_speed(cfg, timing: dict, n: int) -> None:
+    if not timing.get("rank_ms") or n < 1:
+        return
+    old = _speed(cfg)
+    per = timing["rank_ms"] / 1000 / n
+    per = per if old is None else 0.5 * old + 0.5 * per            # smooth over a few searches
+    try:
+        cfg.paths.state.mkdir(parents=True, exist_ok=True)
+        (cfg.paths.state / SPEED_FILE).write_text(json.dumps({"per_doc": round(per, 4), "load_ms": timing.get("load_ms")}))
+    except OSError:
+        pass                                                        # a read-only sandbox
+
+
+def budget_k(cfg, k: int) -> int:
+    """How many candidates the local reranker can score within [search] rerank_budget seconds on this machine, at
+    least 5: on a slow machine the top few are still put in order, and search stays quick."""
+    per = _speed(cfg)
+    budget = float(cfg.get("search.rerank_budget") or 6)
+    return k if not per else max(5, min(k, int(budget / per)))
+
+
 def rerank(cfg, query: str, hits: list[dict], degraded: list, k: int | None = None) -> list[dict]:
     method = available(cfg)
     if method == "none" or len(hits) < 2:
         return hits
     k = k or int(cfg.get("search.candidates") or 20)
+    if method == "qmd":
+        k = budget_k(cfg, k)
     head, tail = hits[:k], hits[k:]
     texts = [passage(cfg.vault, h) for h in head]
-    scores = qmd_scores(query, texts, float(cfg.get("search.rerank_timeout") or 60)) if method == "qmd" else \
+    timing: dict = {}
+    scores = qmd_scores(query, texts, float(cfg.get("search.rerank_timeout") or 60), timing) if method == "qmd" else \
         judge_scores(cfg, query, texts, method)
+    if method == "qmd":
+        _note_speed(cfg, timing, len(texts))
     if not scores:
         degraded.append(f"reranker '{method}' unavailable; kept the fused order")
         return hits

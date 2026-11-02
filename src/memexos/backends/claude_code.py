@@ -78,7 +78,7 @@ class ClaudeCode(Backend):
         except Exception:  # noqa: BLE001 — no such subcommand, or no JSON: cannot tell
             return True, ""
         if j.get("loggedIn") is False:
-            return False, i18n.t("backend.not_logged_in", cmd="claude", login="claude (then /login)") + \
+            return False, i18n.t("backend.not_logged_in", cmd="claude", login="claude auth login") + \
                 (" " + i18n.t("backend.settings_env_hint") if not self.section.get("settings_env") and _settings_env() else "")
         return True, ""
 

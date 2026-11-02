@@ -431,8 +431,10 @@ if [ "$SETUP" = 1 ]; then
     set -- "$@" --plugins "$sites"
   fi
   [ "$MINIMAL" = 1 ] && set -- "$@" --no-qmd
-  if [ "$YES" = 1 ] || [ -z "$TTY" ]; then memex setup --yes "$@" </dev/null
-  else memex setup "$@" <"$TTY"; fi
+  # setup ends with memex doctor, which fails while something required is missing (a model not logged in yet);
+  # that is reported above and must not stop the remaining steps
+  if [ "$YES" = 1 ] || [ -z "$TTY" ]; then memex setup --yes "$@" </dev/null || note "setup finished with items to fix (memex doctor above)"
+  else memex setup "$@" <"$TTY" || note "setup finished with items to fix (memex doctor above)"; fi
   if want deep-search && [ "$MINIMAL" = 0 ]; then
     memex models pull --deep </dev/null || note "the query expansion model did not download; run 'memex models pull --deep' later"
   fi

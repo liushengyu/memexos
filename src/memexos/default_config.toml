@@ -126,6 +126,9 @@ backend = "auto"
 # downloaded (qmd fetches it on first use; set "qmd" to allow that), else none.
 rerank = "auto"
 rerank_timeout = 60     # seconds before giving up on the reranker and keeping the fused order
+# Seconds the local reranker may spend scoring per search. It measures its own speed on this machine and scores only
+# as many top candidates as fit (at least 5): all of them on a GPU, the first few on a CPU-only machine.
+rerank_budget = 6
 candidates = 20
 include_inbox = false
 
@@ -141,7 +144,7 @@ embed_model = "auto"
 # One sentence describing this knowledge base, given to qmd as collection context.
 context = ""
 # Extra paths (glob patterns relative to the knowledge base) to keep out of the
-# vector index, on top of .memex/, .git/, .obsidian/, raw/assets/ and log.md.
+# vector index, on top of .memex/, .git/, .obsidian/, raw/assets/, log.md and index.md.
 ignore = []
 # Route for qmd's one-time model downloads (about 2 GB from Hugging Face; searching
 # itself is offline): "" = your environment's proxy variables, "direct" = no proxy,

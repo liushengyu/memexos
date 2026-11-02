@@ -46,11 +46,13 @@ class Site(http.server.BaseHTTPRequestHandler):
         pass
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def exe():
+    """Looked up once, before any test replaces HOME (the installer puts a browser under the real home)."""
+    from conftest import ORIGINAL_ENV
     found = B.find()
     if not found:
-        if os.environ.get("MEMEX_REAL_BROWSER") == "1":
+        if ORIGINAL_ENV.get("MEMEX_REAL_BROWSER") == "1":
             pytest.fail("a Chromium-family browser is required here (MEMEX_REAL_BROWSER=1) but none was found")
         pytest.skip("no Chrome, Chromium, Edge or Brave installed")
     return found
@@ -72,6 +74,7 @@ def site(home, tmp_path, monkeypatch, exe):
     scaffold.init(v, lang="en", write_user_config=False)
     cfg = config.load(v)
     cfg.data["plugins"]["x"].update(enabled=True, login="memex", proxy="direct")
+    cfg.data.setdefault("browser", {})["command"] = exe            # found under the real home, which tests replace
     yield cfg, base, notes
     srv.shutdown()
 

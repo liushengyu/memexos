@@ -160,7 +160,7 @@ away and rebuilt:
 
 | Store | What is in it | Where | Built when |
 |---|---|---|---|
-| Full-text index | pre-tokenized text of `wiki/`, `raw/`, `inbox/` and `index.md` (CJK as bigrams, Porter stemming for words), file sizes and times; not the text itself | SQLite (Python's built-in `sqlite3`), `~/.cache/memexos/search/<vault id>.sqlite` | `memex init`, then every `memex reindex`: after each publish and every 15 minutes; incremental by size and modification time |
+| Full-text index | pre-tokenized text of `wiki/`, `raw/` and `inbox/` (CJK as bigrams, Porter stemming for words), file sizes and times; not the text itself | SQLite (Python's built-in `sqlite3`), `~/.cache/memexos/search/<vault id>.sqlite` | `memex init`, then every `memex reindex`: after each publish and every 15 minutes; incremental by size and modification time |
 | Vector index | chunks of every markdown file with their embeddings | qmd's own SQLite with `sqlite-vec`, `~/.cache/qmd/memexos-<vault id>.sqlite` | the same reindex, after the full-text index, under its own lock |
 | Link graph | pages and the `[[links]]` between them | not stored: the console computes it from the wiki files when asked | on demand |
 

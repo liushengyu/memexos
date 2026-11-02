@@ -312,8 +312,12 @@ def cmd_models(loader, argv: list[str]) -> int:
         print(i18n.t("models.pulling"))
     r = qmd.models(cfg, a.action if a.action == "pull" else "check", deep=a.deep)
     for name, path in r["models"].items():
-        label = {"embed": i18n.t("models.default_embed"), "rerank": i18n.t("models.rerank"), "generate": i18n.t("models.generate")}.get(name, name)
+        label = {"embed": i18n.t("models.default_embed"), "rerank": i18n.t("models.rerank"),
+                 "generate": i18n.t("models.generate")}.get(name) or i18n.t("models.embed", name=name.rsplit("/", 1)[-1])
         print(f"{'✓' if path else '·'} {label}: {path or i18n.t('models.missing')}")
     if not r["ok"]:
-        print(i18n.t("models.not_ok", why=r.get("why") or ""), file=sys.stderr)
+        if a.action == "pull":
+            print(i18n.t("models.not_ok", why=r.get("why") or "?"), file=sys.stderr)
+        else:
+            print(i18n.t("models.to_pull"))
     return 0 if r["ok"] else 1

@@ -186,3 +186,22 @@ def test_excerpt_is_where_the_keywords_meet():
     body = "Unrelated opening about rank. " * 30 + "Reciprocal rank fusion sums 1/(k + rank) over lists. " + "tail " * 100
     snip = T.snippet(body, ["fusion", "rank", "how are lists combined"])
     assert "Reciprocal rank fusion" in snip
+
+
+def test_reranker_fits_the_time_budget(home):
+    from memexos.search import rerank
+    cfg = config.load(home / "v")
+    assert rerank.budget_k(cfg, 20) == 20                         # not measured yet: all candidates
+    rerank._note_speed(cfg, {"rank_ms": 16000, "load_ms": 3000}, 20)  # a CPU-only machine: 0.8 s per page
+    assert rerank.budget_k(cfg, 20) == 7
+    (cfg.paths.state / rerank.SPEED_FILE).write_text('{"per_doc": 0.04}')
+    assert rerank.budget_k(cfg, 20) == 20
+    (cfg.paths.state / rerank.SPEED_FILE).write_text('{"per_doc": 30}')
+    assert rerank.budget_k(cfg, 20) == 5                          # never fewer than five
+
+
+def test_the_table_of_contents_is_not_a_search_result(vault):
+    cfg = config.load(vault)
+    (vault / "index.md").write_text("# Index\n\n- [[Reciprocal rank fusion]] reciprocal rank fusion\n")
+    fts.update(vault, cfg.paths.search_index)
+    assert "index.md" not in [h["path"] for h in fts.search(vault, cfg.paths.search_index, ["reciprocal rank fusion"], 10)]

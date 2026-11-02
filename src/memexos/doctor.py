@@ -144,5 +144,6 @@ def main(loader, argv: list[str]) -> int:
                 line += f"\n      {i18n.t('doctor.hint_install', hint=r['hint'])}"
             print(line)
     missing = [r for r in rows if r["required"] and not r["ok"]]
-    print("\n" + (i18n.t("doctor.summary_missing", n=len(missing)) if missing else i18n.t("doctor.summary_ok")))
+    summary = i18n.t("doctor.summary_missing", n=len(missing)) if missing else i18n.t("doctor.summary_ok")
+    print("\n" + summary, file=sys.stderr if a.json else sys.stdout)     # --json: standard output is only the JSON
     return 1 if missing else 0

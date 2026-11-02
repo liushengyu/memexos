@@ -70,9 +70,10 @@ def captured(home, tmp_path, monkeypatch):
 
 
 def _require(real: str | None, name: str):
+    from conftest import ORIGINAL_ENV          # the home fixture clears MEMEX_* variables
     if real:
         return
-    if os.environ.get("MEMEX_REAL_CLI") == "1":
+    if ORIGINAL_ENV.get("MEMEX_REAL_CLI") == "1":
         pytest.fail(f"the real `{name}` command line is required here (MEMEX_REAL_CLI=1) but was not found")
     pytest.skip(f"`{name}` is not installed")
 

@@ -20,6 +20,7 @@ import select
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -87,6 +88,8 @@ class Browser:
     def __init__(self, exe: str, profile: Path | None = None, headless: bool = True, url: str = "about:blank",
                  proxy: str | None = None, user_agent: str = ""):
         self.exe, self.headless, self.url, self.proxy, self.user_agent = exe, headless, url, proxy, user_agent
+        self.sandbox = not (hasattr(os, "geteuid") and os.geteuid() == 0)     # Chrome refuses to start as root otherwise
+        self.err_text = ""
         self.profile = profile or profile_dir()
         self.proc: subprocess.Popen | None = None
         self._id, self._buf = 0, b""
@@ -104,13 +107,27 @@ class Browser:
             a.append(f"--proxy-server={self.proxy}")
         elif self.proxy == "":
             a.append("--no-proxy-server")
-        if hasattr(os, "geteuid") and os.geteuid() == 0:
-            a.append("--no-sandbox")              # Chrome refuses to start as root otherwise (containers)
+        if not self.sandbox:
+            a.append("--no-sandbox")
+        if sys.platform.startswith("linux"):
+            a.append("--disable-dev-shm-usage")   # containers give /dev/shm 64 MB, too little for some pages
         return a + [self.url]
 
     def __enter__(self) -> Browser:
         self.profile.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.profile, 0o700)
+        try:
+            return self._start()
+        except BrowserError:
+            # Chrome builds without a system AppArmor profile (Chrome for Testing, Chromium from a download) cannot use
+            # their sandbox on Ubuntu 23.10+ or in containers. The sites visited are the few the owner logs in to.
+            if self.sandbox and "No usable sandbox" in self.err_text:
+                self.sandbox = False
+                return self._start()
+            raise
+
+    def _start(self) -> Browser:
+        self._id, self._buf, self.err_text = 0, b"", ""
         to_r, self._to = os.pipe()
         self._from, from_w = os.pipe()
 
@@ -119,9 +136,11 @@ class Browser:
             b = fcntl.fcntl(from_w, fcntl.F_DUPFD, 10)
             os.dup2(a, 3)
             os.dup2(b, 4)
+        # its log goes to a file: a pipe nobody reads would fill up and stall the browser during a long login
+        self._errf = tempfile.TemporaryFile()
         try:
             self.proc = subprocess.Popen(self.args(), close_fds=False, preexec_fn=remap, stdin=subprocess.DEVNULL,
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)
+                                         stdout=subprocess.DEVNULL, stderr=self._errf, start_new_session=True)
         finally:
             os.close(to_r)
             os.close(from_w)
@@ -156,6 +175,10 @@ class Browser:
         self._cleanup()
 
     def _cleanup(self) -> None:
+        if getattr(self, "_errf", None) is not None and self.proc and self.proc.poll() is not None:
+            self._why_dead()
+            self._errf.close()
+            self._errf = None
         for fd in ("_to", "_from"):
             if getattr(self, fd, None) is not None:
                 try:
@@ -168,13 +191,19 @@ class Browser:
         return bool(self.proc) and self.proc.poll() is None
 
     def _why_dead(self) -> str:
-        err = ""
-        if self.proc and self.proc.stderr:
+        if self.proc and getattr(self, "_errf", None) and not self.err_text:
             try:
-                err = self.proc.stderr.read().decode(errors="replace").strip().splitlines()[-1:][0]
-            except (OSError, IndexError, ValueError):
-                err = ""
-        return err or f"the browser exited ({self.proc.returncode if self.proc else '?'})"
+                if self.proc.poll() is None:
+                    self.proc.wait(timeout=5)
+                self._errf.seek(0, os.SEEK_END)
+                self._errf.seek(max(0, self._errf.tell() - 20000))
+                self.err_text = self._errf.read().decode(errors="replace")
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                pass
+        lines = [l for l in self.err_text.splitlines() if l.strip()]
+        fatal = [l for l in lines if "FATAL" in l or "error while loading shared libraries" in l]
+        why = (fatal or lines[-1:] or [""])[0]
+        return why[-400:] or f"the browser exited ({self.proc.returncode if self.proc else '?'})"
 
     # -------------------------------------------------------- protocol
     def call(self, method: str, timeout: float = 30, session: str | None = None, **params) -> dict:

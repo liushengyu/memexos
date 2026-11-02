@@ -22,7 +22,9 @@ from pathlib import Path
 from memexos.util import run, which
 
 SNIP_NOISE = re.compile(r"@@[^@]*@@|^\(\d+ before, \d+ after\)\s*")
-EXCLUDE = [".memex/**", "raw/assets/**", ".git/**", ".obsidian/**", "log.md"]    # log.md: the operations log, not knowledge
+# log.md is the operations log and index.md the table of contents: neither is knowledge, and the table of contents
+# resembles every question a little
+EXCLUDE = [".memex/**", "raw/assets/**", ".git/**", ".obsidian/**", "log.md", "index.md"]
 
 
 def command(cfg) -> str | None:
