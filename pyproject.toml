@@ -25,6 +25,12 @@ classifiers = [
 # optional external tool (detected at runtime by `memex doctor`).
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/liushengyu/memexos"
+Documentation = "https://github.com/liushengyu/memexos/blob/main/docs/architecture.md"
+Issues = "https://github.com/liushengyu/memexos/issues"
+Changelog = "https://github.com/liushengyu/memexos/commits/main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 anthropic = ["anthropic>=1.0"]
