@@ -121,15 +121,17 @@ class Browser:
         os.chmod(self.profile, 0o700)
         try:
             return self._start()
-        except BrowserError:
+        except BrowserError as e:
             # Chrome builds without a system AppArmor profile (Chrome for Testing, Chromium from a download) cannot use
             # their sandbox on Ubuntu 23.10+ or in containers. The sites visited are the few the owner logs in to.
             if self.sandbox and "No usable sandbox" in self.err_text:
                 self.sandbox = False
                 return self._start()
+            if "no answer" in str(e):          # a first start on a slow or busy machine: once more, with more patience
+                return self._start(wait=120)
             raise
 
-    def _start(self) -> Browser:
+    def _start(self, wait: float = 45) -> Browser:
         self._id, self._buf, self.err_text = 0, b"", ""
         to_r, self._to = os.pipe()
         self._from, from_w = os.pipe()
@@ -148,7 +150,7 @@ class Browser:
             os.close(to_r)
             os.close(from_w)
         try:
-            self.call("Browser.getVersion", timeout=30)
+            self.call("Browser.getVersion", timeout=wait)
         except BrowserError:
             self._kill()
             raise
