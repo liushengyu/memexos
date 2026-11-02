@@ -87,6 +87,9 @@ def _run(cmd: list[str], timeout: float = 15) -> tuple[int, str]:
 def detect() -> dict:
     d: dict = {}
     d["claude"] = bool(which("claude"))
+    if d["claude"]:
+        rc, out = _run([which("claude"), "auth", "status", "--json"])
+        d["claude_login"] = rc == 0 and '"loggedIn": true' in out.replace('"loggedIn":true', '"loggedIn": true')
     d["codex"] = bool(which("codex"))
     if d["codex"]:
         rc, out = _run([which("codex"), "login", "status"])
@@ -210,6 +213,8 @@ def cmd_setup(loader, argv: list[str]) -> int:
                                                   ("Anthropic API", d["keys"]["anthropic"] and d["anthropic_sdk"]),
                                                   ("OpenAI-compatible API", d["keys"]["openai"]),
                                                   (f"Ollama ({len(d['ollama'])} models)", bool(d["ollama"]))) if ok) or "-")
+    if d["claude"] and not d.get("claude_login"):
+        say("claude_login")
     if d["codex"] and not d.get("codex_login"):
         say("codex_login")
     oa_name = a.openai_name
@@ -232,10 +237,10 @@ def cmd_setup(loader, argv: list[str]) -> int:
         if flag:
             roles[r] = [x.strip() for x in flag.split(",") if x.strip()]
     if not roles:
-        say("no_models")
-        return 1
-    say("roles", lines="\n".join(f"  {r:9} {' → '.join(roles[r])}" for r in ROLES if r in roles))
-    if not ask.yes and not ask.yesno("roles_ok", True):
+        say("no_models")              # the knowledge base and search are still set up; writing waits for a model
+    else:
+        say("roles", lines="\n".join(f"  {r:9} {' → '.join(roles[r])}" for r in ROLES if r in roles))
+    if roles and not ask.yes and not ask.yesno("roles_ok", True):
         for r in ROLES:
             v = ask.text("role_edit", ",".join(roles.get(r, [])), role=r)
             roles[r] = [x.strip() for x in v.split(",") if x.strip()]

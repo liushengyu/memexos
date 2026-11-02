@@ -103,8 +103,8 @@ sys_install() {   # packages... (Linux; names for Debian/Ubuntu, mapped for dnf 
   [ "$#" -gt 0 ] || return 0
   if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo "; fi
   if has apt-get; then cmd="${SUDO}apt-get install -y $*"
-  elif has dnf; then cmd="${SUDO}dnf install -y $*"
-  elif has pacman; then cmd="${SUDO}pacman -S --needed --noconfirm $(echo "$*" | sed 's/poppler-utils/poppler/')"
+  elif has dnf; then cmd="${SUDO}dnf install -y $(echo " $* " | sed 's/ g++ / gcc-c++ /g')"
+  elif has pacman; then cmd="${SUDO}pacman -S --needed --noconfirm $(echo " $* " | sed 's/ poppler-utils / poppler /g; s/ g++ / gcc /g; s/ python3 / python /g')"
   else note "install with your package manager: $*"; return 1; fi
   if ask "Run: $cmd ?" y; then
     if has apt-get && [ -z "${APT_UPDATED:-}" ]; then sh -c "${SUDO}apt-get update -qq" </dev/null || true; APT_UPDATED=1; fi
@@ -150,7 +150,10 @@ login_cli() {   # claude | codex: the login opens a page in your browser
       has codex || return 0
       if codex_logged_in; then ok "Codex is logged in"; return 0; fi
       if [ -n "$TTY" ] && ask "Log in to Codex now? A page opens in your browser." y; then
-        codex login <"$TTY" >"$TTY" 2>&1 || true
+        # without a screen (SSH, a container) Codex cannot receive the browser's answer: use a code you enter on the page
+        if [ "$PLATFORM" = linux ] && [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then codex login --device-auth <"$TTY" >"$TTY" 2>&1 || true
+        elif [ -n "${SSH_CONNECTION:-}" ]; then codex login --device-auth <"$TTY" >"$TTY" 2>&1 || true
+        else codex login <"$TTY" >"$TTY" 2>&1 || true; fi
       fi
       if codex_logged_in; then ok "Codex is logged in"; else note "Codex is not logged in yet: run 'codex login'"; fi ;;
   esac
@@ -308,7 +311,11 @@ fi
 [ "${NODE_MAJOR:-0}" -ge 22 ] || die "Node.js 22+ did not install; install it from https://nodejs.org and run this again"
 ok "Node.js $NODE_MAJOR"
 if ! has qmd; then
-  npm_global @tobilu/qmd
+  npm_global @tobilu/qmd || true
+  if ! has qmd && [ "$PLATFORM" = linux ] && { ! has make || ! has g++ || ! has python3; }; then
+    info "Parts of qmd are compiled on this machine when no ready-made build fits it; that needs python3, make and a C++ compiler."
+    if sys_install python3 make g++; then npm_global @tobilu/qmd || true; fi
+  fi
   if ! has qmd; then
     prefix="$(npm prefix -g 2>/dev/null </dev/null || echo /usr)"
     if [ -x "$prefix/bin/qmd" ]; then link_bin "$prefix/bin/qmd" qmd; fi
