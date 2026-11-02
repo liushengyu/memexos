@@ -70,9 +70,10 @@ def captured(home, tmp_path, monkeypatch):
 
 
 def _require(real: str | None, name: str):
+    from conftest import ORIGINAL_ENV          # the home fixture clears MEMEX_* variables
     if real:
         return
-    if os.environ.get("MEMEX_REAL_CLI") == "1":
+    if ORIGINAL_ENV.get("MEMEX_REAL_CLI") == "1":
         pytest.fail(f"the real `{name}` command line is required here (MEMEX_REAL_CLI=1) but was not found")
     pytest.skip(f"`{name}` is not installed")
 
@@ -91,6 +92,8 @@ def test_claude_flags_exist_in_the_real_cli(captured):
     assert "dontAsk" in main_help, "permission mode dontAsk is no longer offered"
     auth_help = help_text(real["claude"], "auth", "status", "--help")
     assert "--json" in auth_help, "`claude auth status --json` (the login check) is gone"
+    assert "Usage: claude auth login" in help_text(real["claude"], "auth", "login", "--help"), \
+        "`claude auth login` (run by install.sh) is gone"
 
 
 def test_codex_flags_exist_in_the_real_cli(captured):
@@ -108,3 +111,4 @@ def test_codex_flags_exist_in_the_real_cli(captured):
         assert mode in exec_help, f"sandbox mode {mode} is no longer offered"
     login_help = help_text(real["codex"], "login", "--help")
     assert "status" in login_help, "`codex login status` (the login check) is gone"
+    assert "--device-auth" in login_help, "`codex login --device-auth` (install.sh, without a screen) is gone"

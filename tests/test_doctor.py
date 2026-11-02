@@ -45,3 +45,13 @@ def test_doctor_reports_missing_cli_and_search_state(home, tmp_path, monkeypatch
     assert not fts["ok"]                                     # nothing indexed yet
     code = doctor.main(lambda v=None: cfg, [])
     assert code == 1                                         # required items missing → non-zero exit
+
+
+def test_doctor_json_is_only_json(home, monkeypatch, capsys):
+    import json
+    from memexos.cli import main
+    monkeypatch.setenv("MEMEX_VAULT", str(home / "v"))
+    main(["doctor", "--json"])
+    out = capsys.readouterr().out
+    rows = json.loads(out)
+    assert isinstance(rows, list) and all({"section", "label", "ok", "required", "hint"} <= set(r) for r in rows)

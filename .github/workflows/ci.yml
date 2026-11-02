@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python: ["3.11", "3.12", "3.13", "3.14"]
+        python: ["3.11", "3.12", "3.13", "3.14", "3.15"]
         include:
           - os: macos-latest
             python: "3.12"
@@ -46,7 +46,10 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --extra dev
-      - run: uv run pytest -q
+      - name: tests (the login tests drive the runner's Google Chrome; they must not be skipped here)
+        env:
+          MEMEX_REAL_BROWSER: "1"
+        run: uv run pytest -q
 
   leak-scan:
     name: leak scan
@@ -136,6 +139,20 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           memex --version
           qmd --version
+      - name: vector search works through qmd's library (guards against changes in qmd)
+        if: runner.os == 'Linux'
+        run: |
+          export HOME="$RUNNER_TEMP/home" PATH="$RUNNER_TEMP/home/.local/bin:$PATH"
+          memex init --sample
+          memex models pull
+          memex reindex
+          memex search "who kept a slip-box" --mode vector -n 3 | tee out.txt
+          grep -q "Luhmann\|Zettelkasten" out.txt
+          if grep -q "⚠" out.txt; then echo "vector search ran in a reduced way"; exit 1; fi
+      - name: an unknown optional part is refused before anything is installed
+        run: |
+          if sh install.sh --yes --with nonsense 2>err.txt; then exit 1; fi
+          grep -q "unknown optional part" err.txt
 
   ci-ok:
     name: ci-ok

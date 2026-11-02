@@ -87,6 +87,9 @@ def _run(cmd: list[str], timeout: float = 15) -> tuple[int, str]:
 def detect() -> dict:
     d: dict = {}
     d["claude"] = bool(which("claude"))
+    if d["claude"]:
+        rc, out = _run([which("claude"), "auth", "status", "--json"])
+        d["claude_login"] = rc == 0 and '"loggedIn": true' in out.replace('"loggedIn":true', '"loggedIn": true')
     d["codex"] = bool(which("codex"))
     if d["codex"]:
         rc, out = _run([which("codex"), "login", "status"])
@@ -112,6 +115,15 @@ def detect() -> dict:
     for tool in ("yt-dlp", "ffmpeg", "whisper-cli", "pdftotext", "curl", "git"):
         d[tool] = bool(which(tool))
     return d
+
+
+def env_proxy() -> str:
+    """The proxy this shell uses, proposed as MemexOS's route: scheduled jobs start without the shell's variables, so
+    without it they would fetch directly. Not proposed when it carries a password (it would be written into the
+    settings file); then the setting stays empty and the environment is used where there is one."""
+    import urllib.parse
+    v = next((os.environ[k] for k in ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy") if os.environ.get(k)), "")
+    return "" if not v or urllib.parse.urlsplit(v).password else v
 
 
 def propose(d: dict, extra: str = "") -> dict[str, list[str]]:
@@ -181,7 +193,10 @@ def cmd_setup(loader, argv: list[str]) -> int:
     ap.add_argument("--judge-backend", choices=["llm", "jev", "none"])
     ap.add_argument("--sessions", action=argparse.BooleanOptionalAction, default=None, help="collect from your Claude Code / Codex sessions")
     ap.add_argument("--plugins", help="login-based collectors to enable: x,bilibili,youtube")
-    ap.add_argument("--cookie-browser", default="", help="browser to export login cookies from (chrome, firefox, safari, edge, brave)")
+    ap.add_argument("--cookie-browser", default="", help="copy those logins from this everyday browser (chrome, firefox, safari, edge, brave) "
+                    "instead of logging in once in MemexOS's own browser profile (the default)")
+    ap.add_argument("--login", action=argparse.BooleanOptionalAction, default=None,
+                    help="open the login windows for the enabled collectors now (default: ask; with --yes: no)")
     ap.add_argument("--proxy", default=None, help='route for fetching pages: "" = environment, "direct", or a proxy URL')
     ap.add_argument("--proxy-cacert", default=None)
     ap.add_argument("--qmd", action=argparse.BooleanOptionalAction, default=None, help="build the vector index (qmd) now")
@@ -207,6 +222,8 @@ def cmd_setup(loader, argv: list[str]) -> int:
                                                   ("Anthropic API", d["keys"]["anthropic"] and d["anthropic_sdk"]),
                                                   ("OpenAI-compatible API", d["keys"]["openai"]),
                                                   (f"Ollama ({len(d['ollama'])} models)", bool(d["ollama"]))) if ok) or "-")
+    if d["claude"] and not d.get("claude_login"):
+        say("claude_login")
     if d["codex"] and not d.get("codex_login"):
         say("codex_login")
     oa_name = a.openai_name
@@ -229,10 +246,10 @@ def cmd_setup(loader, argv: list[str]) -> int:
         if flag:
             roles[r] = [x.strip() for x in flag.split(",") if x.strip()]
     if not roles:
-        say("no_models")
-        return 1
-    say("roles", lines="\n".join(f"  {r:9} {' → '.join(roles[r])}" for r in ROLES if r in roles))
-    if not ask.yes and not ask.yesno("roles_ok", True):
+        say("no_models")              # the knowledge base and search are still set up; writing waits for a model
+    else:
+        say("roles", lines="\n".join(f"  {r:9} {' → '.join(roles[r])}" for r in ROLES if r in roles))
+    if roles and not ask.yes and not ask.yesno("roles_ok", True):
         for r in ROLES:
             v = ask.text("role_edit", ",".join(roles.get(r, [])), role=r)
             roles[r] = [x.strip() for x in v.split(",") if x.strip()]
@@ -262,8 +279,8 @@ def cmd_setup(loader, argv: list[str]) -> int:
     plugins = [p.strip() for p in (a.plugins.split(",") if a.plugins else []) if p.strip()]
     if a.plugins is None and not ask.yes:
         plugins = [p.strip() for p in ask.text("plugins", "").split(",") if p.strip()]
-    browser = a.cookie_browser or (ask.text("browser", "chrome") if plugins else "")
-    proxy = a.proxy if a.proxy is not None else ask.text("proxy", "")
+    login_from = a.cookie_browser or "memex"
+    proxy = a.proxy if a.proxy is not None else ask.text("proxy", env_proxy())
     cacert = a.proxy_cacert if a.proxy_cacert is not None else (ask.text("cacert", "") if proxy.startswith("https://") else "")
 
     # 5. write the settings
@@ -285,8 +302,7 @@ def cmd_setup(loader, argv: list[str]) -> int:
     for p in ("x", "bilibili", "youtube"):
         if p in plugins:
             text = toml_set(text, f"plugins.{p}", "enabled", True)
-            if browser:
-                text = toml_set(text, f"plugins.{p}", "browser", browser)
+            text = toml_set(text, f"plugins.{p}", "login", login_from)
     text = toml_set(text, "fetch", "proxy", proxy)
     if cacert:
         text = toml_set(text, "fetch", "proxy_cacert", cacert)
@@ -307,10 +323,30 @@ def cmd_setup(loader, argv: list[str]) -> int:
     from memexos.search import fts
     fts.update(cfg.vault, cfg.paths.search_index)
 
-    # 7. vector search
+    # 7. logins for the collectors that need one: a window opens, the person logs in, MemexOS keeps it alive afterwards
+    if plugins and login_from == "memex":
+        from memexos.capture import browser as login_browser, cookies
+        todo = [p for p in plugins if p in cookies.needs_login(cfg)]
+        can = login_browser.find(cfg) and login_browser.can_show_window()
+        now = a.login if a.login is not None else (False if ask.yes or not can else ask.yesno("login_now", True, sites=", ".join(todo)))
+        for p in todo:
+            if now and can:
+                try:
+                    cookies.login(cfg, p)
+                    say("login_done", site=cookies.SITES[p].name)
+                    continue
+                except Exception as e:  # noqa: BLE001
+                    say("login_failed", site=cookies.SITES[p].name, why=str(e)[:200])
+            say("login_later", site=p)
+
+    # 8. vector search
     if d["qmd"]:
         build = a.qmd if a.qmd is not None else ask.yesno("qmd", True)
         if build:
+            from memexos.search import qmd as qmd_mod
+            got = qmd_mod.models(cfg, "pull")          # in the foreground with a progress bar, so nothing races for the files
+            if not got["ok"]:
+                say("models_failed")
             from memexos.util import self_cmd
             log = cfg.paths.state / "logs"
             log.mkdir(parents=True, exist_ok=True)
@@ -321,7 +357,7 @@ def cmd_setup(loader, argv: list[str]) -> int:
     else:
         say("qmd_missing")
 
-    # 8. scheduling
+    # 9. scheduling
     sched = a.schedule if a.schedule is not None else ask.yesno("schedule", False)
     if sched:
         from memexos import schedule

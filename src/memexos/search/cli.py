@@ -1,4 +1,4 @@
-"""`memex search`, `memex get`, `memex reindex`."""
+"""`memex search`, `memex get`, `memex reindex`, `memex models`."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from pathlib import Path
 
 from memexos import events, i18n, rawref
 from memexos.search import engine, fts, qmd
+from memexos.search import text as T
 from memexos.util import split_frontmatter
 
 KINDS = ("topics", "concepts", "entities", "sources")
@@ -89,7 +90,8 @@ def describe(cfg, hit: dict) -> tuple[str, str, str | None]:
                 cls = i18n.t("search.classification", domain=_fm_list(fm.get("domain")), type=_fm_list(fm.get("content_type")),
                              evidence=_fm_list(fm.get("evidence")))
                 if fm.get("use_note"):
-                    cls += i18n.t("search.note", note=str(fm["use_note"])[:80])
+                    from memexos.catalog.classify import short
+                    cls += i18n.t("search.note", note=short(str(fm["use_note"])))
         return label, cls, None
     if p.startswith("raw/"):
         if view:
@@ -111,30 +113,68 @@ def cmd_search(loader, argv: list[str]) -> int:
     if _no_vault(cfg):
         return 1
     t0 = time.time()
-    hits, kws, degraded = engine.search(cfg, a.query, a.kw.split() if a.kw else None, a.n, a.mode, a.inbox or None)
+    found, kws, degraded = engine.search(cfg, a.query, a.kw.split() if a.kw else None, a.n + 6, a.mode, a.inbox or None)
+    hits = [dict(h, **detail(cfg, h, kws, a.query)) for h in found]
+    hits = dedupe(hits)[:a.n]
     note_search(cfg, a.query, a.mode, len(hits), time.time() - t0, top=[h["path"] for h in hits[:10]])
     if a.json:
         print(json.dumps({"degraded": degraded, "keywords": kws, "hits": [
-            {**{k: h.get(k) for k in ("path", "title", "snippet")},
-             **dict(zip(("kind", "classification", "compiled_page"), describe(cfg, h)))} for h in hits]}, ensure_ascii=False))
+            {k: h.get(k) for k in ("path", "title", "kind", "classification", "compiled_page", "sources", "matched", "snippet")}
+            for h in hits]}, ensure_ascii=False))
         return 0
     print(i18n.t("search.header", query=a.query, mode=a.mode, keywords=" / ".join(kws) or "-", seconds=f"{time.time() - t0:.1f}"))
     for d in degraded:
         print(f"⚠️ {d}")
     print()
     for i, h in enumerate(hits, 1):
-        label, cls, page = describe(cfg, h)
         snip = re.sub(r"\s+", " ", h.get("snippet", "")).strip()[:160]
-        print(f"{i}. [{label}] {h['title']}  ({h['path']})")
-        if page:
-            print("   " + i18n.t("search.compiled_as", page=page))
-        if cls:
-            print("   " + cls)
+        print(f"{i}. [{h['kind']}] {h['title']}  ({h['path']})")
+        if h.get("compiled_page"):
+            print("   " + i18n.t("search.compiled_as", page=h["compiled_page"]))
+        if h.get("classification"):
+            print("   " + h["classification"])
+        info = []
+        if h.get("sources"):
+            info.append(i18n.t("search.sources", n=h["sources"]))
+        if kws:
+            info.append(i18n.t("search.matched", words=", ".join(h["matched"])) if h["matched"] else i18n.t("search.matched_none"))
+        if info:
+            print("   " + " · ".join(info))
         if snip:
             print("   " + i18n.t("search.excerpt", text=snip))
     if not hits:
         print(i18n.t("search.nothing"))
     return 0
+
+
+_raw_names: set | None = None
+
+
+def detail(cfg, hit: dict, kws: list[str], question: str) -> dict:
+    """What an agent needs to judge a hit without opening it: kind, classification, the wiki page a raw file was
+    compiled into, how many sources a wiki page rests on, which keywords it contains, and the passage where they meet."""
+    global _raw_names
+    kind, cls, page = describe(cfg, hit)
+    try:
+        text = (cfg.vault / hit["path"]).read_text(encoding="utf-8", errors="replace")[:400_000]
+    except OSError:
+        text = ""
+    body = split_frontmatter(text)[1] if text else ""
+    out = {"kind": kind, "classification": cls, "compiled_page": page, "sources": None,
+           "matched": T.matched(hit.get("title", "") + "\n" + body, kws) if kws else [],
+           "snippet": T.snippet(body, (kws or []) + [question]) if body else hit.get("snippet", "")}
+    if hit["path"].startswith("wiki/") and body:
+        if _raw_names is None:
+            _raw_names = rawref.index(cfg.vault)
+        out["sources"] = len(set(rawref.find(body, _raw_names, cfg.vault))) or None
+    return out
+
+
+def dedupe(hits: list[dict]) -> list[dict]:
+    """A raw file and the wiki page compiled from it are the same knowledge: keep the page, drop the raw file (the
+    page's Sources section leads back to it)."""
+    paths = {h["path"] for h in hits}
+    return [h for h in hits if not (h.get("compiled_page") and f"wiki/sources/{h['compiled_page']}.md" in paths)]
 
 
 def note_search(cfg, query: str, mode: str, hits: int, seconds: float, job: str = "search", top: list[str] | None = None) -> None:
@@ -154,16 +194,42 @@ def note_read(cfg, path: str) -> None:
         pass
 
 
-def resolve_page(vault: Path, target: str) -> str | None:
-    t = target.strip()
-    if (vault / t).is_file():
-        return t
-    name = t.removesuffix(".md").lower()
+def clean_name(target: str) -> str:
+    """What agents paste as a page name: [[Page|alias]], [[Page#Heading]], quotes, backticks, a path with or without
+    .md, a trailing (wiki/…) from search output."""
+    t = target.strip().strip("`'\"“”‘’「」 ")
+    m = re.search(r"\(((?:wiki|raw|inbox)/[^)]+)\)\s*$", t)
+    if m:
+        t = m.group(1)
+    t = re.sub(r"^\[\[|\]\]$", "", t).strip()
+    t = t.split("|", 1)[0].split("#", 1)[0].strip()
+    return t
+
+
+def page_names(vault: Path) -> dict[str, str]:
+    """Every page by its lower-case name (file stem): wiki first, then raw."""
+    out: dict[str, str] = {}
     for root in ("wiki", "raw"):
-        for p in (vault / root).rglob("*.md"):
-            if p.stem.lower() == name:
-                return p.relative_to(vault).as_posix()
-    return None
+        for p in sorted((vault / root).rglob("*.md")):
+            out.setdefault(p.stem.lower(), p.relative_to(vault).as_posix())
+    return out
+
+
+def resolve_page(vault: Path, target: str) -> str | None:
+    t = clean_name(target)
+    for cand in (t, t + ".md", "wiki/" + t, "wiki/" + t + ".md"):
+        if cand and (vault / cand).is_file() and (vault / cand).resolve().is_relative_to(vault.resolve()):
+            return Path(cand).as_posix()
+    return page_names(vault).get(Path(t).name.removesuffix(".md").lower())
+
+
+def suggest(vault: Path, target: str, n: int = 5) -> list[str]:
+    import difflib
+    names = page_names(vault)
+    key = Path(clean_name(target)).name.removesuffix(".md").lower()
+    close = difflib.get_close_matches(key, list(names), n=n, cutoff=0.6)
+    close += [k for k in names if key and key in k and k not in close][: n - len(close)]
+    return [Path(names[k]).stem for k in close[:n]]
 
 
 def cmd_get(loader, argv: list[str]) -> int:
@@ -177,7 +243,9 @@ def cmd_get(loader, argv: list[str]) -> int:
         return 1
     rel = resolve_page(cfg.vault, a.page)
     if not rel:
-        print(i18n.t("get.not_found", page=a.page), file=sys.stderr)
+        close = suggest(cfg.vault, a.page)
+        print(i18n.t("get.not_found", page=a.page, close=" / ".join(close)) if close else i18n.t("get.not_found_none", page=a.page),
+              file=sys.stderr)
         return 1
     lines = (cfg.vault / rel).read_text(encoding="utf-8", errors="replace").splitlines()
     note_read(cfg, rel)
@@ -229,3 +297,27 @@ def _reindex(cfg, a) -> int:
     if (want == "qmd" or (want == "auto" and qmd.command(cfg))) and not lock.coalesced(cfg.paths.locks, "qmd", vectors):
         print(i18n.t("reindex.qmd_busy"))
     return 0
+
+
+def cmd_models(loader, argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="memex models", description=i18n.t("models.help"))
+    ap.add_argument("action", nargs="?", default="status", choices=["status", "pull"])
+    ap.add_argument("--deep", action="store_true", help=i18n.t("models.opt_deep"))
+    a = ap.parse_args(argv)
+    cfg = loader()
+    if not qmd.command(cfg):
+        print(i18n.t("setup.qmd_missing"))
+        return 1
+    if a.action == "pull":
+        print(i18n.t("models.pulling"))
+    r = qmd.models(cfg, a.action if a.action == "pull" else "check", deep=a.deep)
+    for name, path in r["models"].items():
+        label = {"embed": i18n.t("models.default_embed"), "rerank": i18n.t("models.rerank"),
+                 "generate": i18n.t("models.generate")}.get(name) or i18n.t("models.embed", name=name.rsplit("/", 1)[-1])
+        print(f"{'✓' if path else '·'} {label}: {path or i18n.t('models.missing')}")
+    if not r["ok"]:
+        if a.action == "pull":
+            print(i18n.t("models.not_ok", why=r.get("why") or "?"), file=sys.stderr)
+        else:
+            print(i18n.t("models.to_pull"))
+    return 0 if r["ok"] else 1

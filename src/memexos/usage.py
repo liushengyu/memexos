@@ -23,6 +23,7 @@ import json
 import os
 import re
 import shlex
+import sys
 import time
 from pathlib import Path
 
@@ -276,14 +277,21 @@ def cmd_feedback(loader, argv: list[str]) -> int:
     ap.add_argument("--evidence", default="")
     a = ap.parse_args(argv)
     cfg = loader()
-    rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "page": a.page, "kind": a.kind, "why": a.why, "evidence": a.evidence,
+    from memexos.search.cli import resolve_page, suggest
+    page = resolve_page(cfg.vault, a.page)
+    if not page and a.kind != "missing":
+        close = suggest(cfg.vault, a.page)
+        print(i18n.t("usage.feedback_no_page", page=a.page, close=" / ".join(close) or "-"), file=sys.stderr)
+        return 1
+    page = page or a.page                       # "missing" may name a page that does not exist yet
+    rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "page": page, "kind": a.kind, "why": a.why, "evidence": a.evidence,
            "session": os.environ.get("CLAUDE_CODE_SESSION_ID", ""), "cwd": S.tilde(os.getcwd()), "status": "pending"}
     try:
         append_jsonl(dirs(cfg) / "feedback.jsonl", [rec])
-        event_log.emit(cfg.paths.state, "feedback", page=a.page, kind=a.kind, why=a.why[:300])
-        print(i18n.t("usage.feedback_saved", page=a.page))
+        event_log.emit(cfg.paths.state, "feedback", page=page, kind=a.kind, why=a.why[:300])
+        print(i18n.t("usage.feedback_saved", page=page))
     except OSError:
-        print(i18n.t("usage.feedback_readonly", page=a.page))
+        print(i18n.t("usage.feedback_readonly", page=page))
     return 0
 
 

@@ -1,4 +1,5 @@
 memex get <page name or path> [--from <line>] [--lines <count>]
 
-  Page names need no folder and no .md, e.g. memex get "Reciprocal rank fusion"; a path works too, e.g.
-  memex get "wiki/topics/Search.md". Read long pages in parts with --from / --lines. Not found: use memex search.
+  Any of these work: a page name without folder or .md (memex get "Reciprocal rank fusion"), a [[link]] copied from a page,
+  a path (memex get "wiki/topics/Search.md"). Names are matched without regard to case. Read long pages in parts with
+  --from / --lines. When nothing matches, close page names are suggested; otherwise use memex search.

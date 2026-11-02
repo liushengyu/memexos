@@ -1,6 +1,6 @@
 // Score candidate passages with qmd's bundled local reranker (Qwen3-Reranker, GGUF via node-llama-cpp).
 // stdin: one JSON object per line {"id", "query", "docs": [{"file", "text"}], "instruction"?}
-// stdout: one JSON object per line {"id", "model", "scores": {file: score}}
+// stdout: one JSON object per line {"id", "model", "scores": {file: score}, "load_ms", "rank_ms"}
 //
 // The qmd package directory comes from QMD_PKG (found by memexos.search.qmd.package_dir). This reaches
 // into qmd's distributed module rather than a public API, so it can break when qmd changes; MemexOS
@@ -25,11 +25,15 @@ function template(ins) {
     `<Instruct>: ${ins}\n<Query>: {{query}}\n<Document>: {{document}}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n`;
 }
 
+let loadMs = 0;
+
 async function rankWith(ins, query, docs) {
+  const t0 = Date.now();
   const model = await llm.ensureRerankModel();
   if (!contexts.has(ins)) {
     contexts.set(ins, await model.createRankingContext({ contextSize: CONTEXT, template: template(ins) }));
   }
+  loadMs = Date.now() - t0;
   const maxDoc = CONTEXT - OVERHEAD - model.tokenize(query).length;
   const texts = docs.map((d) => {
     const toks = model.tokenize(d.text);
@@ -44,6 +48,7 @@ for await (const line of rl) {
   if (!line.trim()) continue;
   const t = JSON.parse(line);
   let scores, model = "qmd-reranker";
+  const started = Date.now();
   if (t.instruction) {
     scores = await rankWith(t.instruction, t.query, t.docs);
   } else {
@@ -52,6 +57,7 @@ for await (const line of rl) {
     for (const x of r.results) scores[x.file] = x.score;
     model = r.model;
   }
-  process.stdout.write(JSON.stringify({ id: t.id, model, scores }) + "\n");
+  // load_ms: loading the model (paid once per process); rank_ms: scoring these documents
+  process.stdout.write(JSON.stringify({ id: t.id, model, scores, load_ms: loadMs, rank_ms: Date.now() - started - loadMs }) + "\n");
 }
 process.exit(0);

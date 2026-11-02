@@ -31,7 +31,7 @@ from memexos.util import split_frontmatter
 
 SCHEMA_VERSION = 2          # 2: Porter stemming for words (box / boxes, invent / invented)
 INDEXED_DIRS = ("wiki", "raw", "inbox")
-INDEXED_FILES = ("index.md",)
+INDEXED_FILES: tuple[str, ...] = ()        # index.md lists every page: it matches everything and answers nothing
 EXTS = (".md", ".markdown", ".txt")
 
 

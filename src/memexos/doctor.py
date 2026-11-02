@@ -102,6 +102,14 @@ def checks(cfg) -> list[dict]:
             hint("asr_model"))
     if cfg.get("plugins.x.enabled"):
         add(cap, i18n.t("doctor.tool", name="twitter"), which("twitter"), False, hint("twitter"))
+    from memexos.capture import browser as login_browser, cookies
+    sites = [s for s in cookies.SITES if cfg.get(f"plugins.{s}.enabled") and cookies.source(cfg, s)]
+    if any(cookies.source(cfg, s) == "memex" for s in sites):
+        exe = login_browser.find(cfg)
+        add(cap, i18n.t("doctor.login_browser", path=exe or "-"), exe, False, hint("browser"))
+    for s in sites:
+        line = cookies.status(cfg, s)
+        add(cap, line, s not in cookies.needs_login(cfg), False, f"memex login {s}")
 
     sched = i18n.t("doctor.section_schedule")
     try:
@@ -136,5 +144,6 @@ def main(loader, argv: list[str]) -> int:
                 line += f"\n      {i18n.t('doctor.hint_install', hint=r['hint'])}"
             print(line)
     missing = [r for r in rows if r["required"] and not r["ok"]]
-    print("\n" + (i18n.t("doctor.summary_missing", n=len(missing)) if missing else i18n.t("doctor.summary_ok")))
+    summary = i18n.t("doctor.summary_missing", n=len(missing)) if missing else i18n.t("doctor.summary_ok")
+    print("\n" + summary, file=sys.stderr if a.json else sys.stdout)     # --json: standard output is only the JSON
     return 1 if missing else 0

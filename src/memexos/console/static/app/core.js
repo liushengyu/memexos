@@ -467,6 +467,8 @@ const CMDS = () => [
   {t: T("act.intake"), k: T("cmd.k_action"), run: e => doAction(e, "intake", {}, {title: T("act.intake"), confirm: esc(T("act.intake_confirm"))})},
   {t: T("act.pause"), k: T("cmd.k_action"), run: e => doAction(e, "pause", {}, {title: T("act.pause"), confirm: esc(T("act.pause_confirm"))})},
   {t: T("act.resume"), k: T("cmd.k_action"), run: e => doAction(e, "resume", {}, {title: T("act.resume")})},
+  ...((LIVE.data || {}).logins || []).map(s => ({t: T("act.login", {site: s.name}), k: T("cmd.k_action"),
+    run: e => doAction(e, "login", {site: s.id}, {title: T("act.login", {site: s.name}), confirm: esc(T("act.login_confirm", {site: s.name}))})})),
   {t: T("act.inbox_apply"), k: T("cmd.k_action"), run: e => doAction(e, "inbox-apply", {}, {title: T("act.inbox_apply"), confirm: esc(T("act.inbox_apply_confirm"))})},
 ];
 const Cmdk = {open: false, items: [], idx: 0,

@@ -22,7 +22,9 @@ from pathlib import Path
 from memexos.util import run, which
 
 SNIP_NOISE = re.compile(r"@@[^@]*@@|^\(\d+ before, \d+ after\)\s*")
-EXCLUDE = [".memex/**", "raw/assets/**", ".git/**", ".obsidian/**", "log.md"]    # log.md: the operations log, not knowledge
+# log.md is the operations log and index.md the table of contents: neither is knowledge, and the table of contents
+# resembles every question a little
+EXCLUDE = [".memex/**", "raw/assets/**", ".git/**", ".obsidian/**", "log.md", "index.md"]
 
 
 def command(cfg) -> str | None:
@@ -75,10 +77,10 @@ PROXY_VARS = ("https_proxy", "http_proxy", "all_proxy")
 
 def _env(cfg) -> dict:
     """qmd works offline except for its one-time model downloads (from Hugging Face). [search.qmd] proxy picks their
-    route like [fetch] proxy does: "" = the environment's proxy variables, "direct" = none, or a proxy URL. Node only
+    route ("" = [fetch] proxy, else the environment's proxy variables; "direct" = none; or a proxy URL). Node only
     honours proxy variables with NODE_USE_ENV_PROXY=1, and a proxy with its own CA needs NODE_EXTRA_CA_CERTS."""
     env = dict(os.environ)
-    want = (cfg.get("search.qmd.proxy") or "").strip()
+    want = (cfg.get("search.qmd.proxy") or cfg.get("fetch.proxy") or "").strip()
     if want == "direct":
         return {k: v for k, v in env.items() if k.lower() not in PROXY_VARS}
     if want:
@@ -160,11 +162,41 @@ def update(cfg, embed: bool = True) -> dict:
             "why": "" if out.returncode == 0 else msg.strip()[-300:], **({"model_changed": model or "qmd default"} if changed else {})}
 
 
+def vectors(cfg, q: str, n: int) -> list[dict] | None:
+    """Plain vector similarity through qmd's library (qmd_vsearch.mjs): no query expansion. None when it cannot run."""
+    import importlib.resources as resources
+    import subprocess
+    pkg = package_dir()
+    if not pkg or not which("node"):
+        return None
+    script = resources.files("memexos.search").joinpath("qmd_vsearch.mjs")
+    try:
+        r = subprocess.run(["node", str(script), str(db_file(cfg)), str(config_file(cfg)), collection(cfg), str(n)], input=q,
+                           capture_output=True, text=True, env={**_env(cfg), "QMD_PKG": str(pkg)}, timeout=300)
+        items = json.loads((r.stdout or "").strip().splitlines()[-1]) if r.returncode == 0 else None
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+        return None
+    if not isinstance(items, list):
+        return None
+    out = []
+    for h in items:
+        p = re.sub(r"^qmd://[^/]+/", "", h.get("file") or "").split("?", 1)[0]
+        if p:
+            out.append({"path": p, "title": h.get("title") or Path(p).stem, "snippet": (h.get("body") or "")[:300]})
+    return out
+
+
 def query(cfg, mode: str, q: str, n: int, degraded: list) -> list[dict] | None:
-    """mode: vsearch (vectors) | search (qmd's BM25) | query (expansion + rerank). Returns [{path, title, snippet}]."""
+    """mode: vsearch (vectors) | search (qmd's BM25) | query (expansion + rerank). Returns [{path, title, snippet}].
+    Vector search goes through qmd's library without query expansion; the command line is the fallback."""
     exe = command(cfg)
     if not exe:
         return None
+    if mode == "vsearch":
+        got = vectors(cfg, q, n)
+        if got is not None:
+            return got
+        degraded.append("qmd's library could not be used for vector search; used `qmd vsearch`, which also rewrites the question with a language model (slower)")
     try:
         r = run([exe, "--index", index_name(cfg), mode, q, "--json", "-n", str(n), "-c", collection(cfg)],
                 env=_env(cfg), timeout=300)
@@ -185,6 +217,28 @@ def query(cfg, mode: str, q: str, n: int, degraded: list) -> list[dict] | None:
         if p:
             out.append({"path": p, "title": h.get("title") or Path(p).stem, "snippet": SNIP_NOISE.sub("", h.get("snippet", "")).strip()})
     return out
+
+
+def models(cfg, action: str = "check", deep: bool = False) -> dict:
+    """The local models search needs: the embedding model (per [search.qmd] embed_model), the reranker and, with
+    deep=True, qmd's query expansion model (only `--mode deep` uses it). action "check" returns {model: path or None};
+    "pull" downloads what is missing (with a progress bar on a terminal) and never deletes or replaces a downloaded
+    model, unlike `qmd pull`."""
+    import importlib.resources as resources
+    pkg = package_dir()
+    if not pkg or not which("node"):
+        return {"ok": False, "why": "qmd or node not found", "models": {}}
+    want = [embed_model(cfg) or "embed", "rerank"] + (["generate"] if deep else [])
+    script = resources.files("memexos.search").joinpath("qmd_models.mjs")
+    import subprocess
+    r = subprocess.run(["node", str(script), action, *want], env={**_env(cfg), "QMD_PKG": str(pkg)}, stdout=subprocess.PIPE,
+                       stderr=None if action == "pull" else subprocess.PIPE, text=True, timeout=7200)
+    try:
+        found = json.loads((r.stdout or "").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        found = {}
+    return {"ok": r.returncode == 0 and all(found.get(m) for m in want), "models": found,
+            "why": "" if r.returncode == 0 else (r.stderr or "").strip()[-300:] if action != "pull" else "download failed"}
 
 
 def models_dir() -> Path:

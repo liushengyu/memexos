@@ -10,35 +10,41 @@ Install and set up MemexOS (https://github.com/liushengyu/memexos), a self-maint
 machine for me.
 
 **Done means:**
-1. `memex doctor` reports every required item available.
-2. qmd (the local vector search engine) is installed and the knowledge base is being embedded or already embedded,
-   unless I decline the model download.
+1. `memex doctor` reports every required item available, including a model command line that is logged in.
+2. qmd (the local vector search engine) and its search models are installed, and the knowledge base is embedded or
+   being embedded.
 3. A knowledge base exists (by default `~/memex`), and `memex search "<a question>"` returns results from it.
-4. My agent instructions tell agents to use it (step "Give your agents the memory" in the README), if I agree.
+4. The optional parts I chose work (for collectors: `memex cookies status` shows each site logged in).
+5. My agent instructions tell agents to use it (step "Give your agents the memory" in the README), if I agree.
 
 **Tools you can use:**
-- `install.sh` from the repository: `sh install.sh --help` lists its options (`--yes`, `--minimal`, `--no-setup`). It
-  installs uv, MemexOS, Node.js 22+ and qmd, qmd's models, optional video and PDF tools, and can install the Claude
-  Code or Codex command line. Use it, or do the same steps yourself if something on this machine needs a different way.
+- `install.sh` from the repository; `sh install.sh --help` lists its options. It always installs uv, MemexOS,
+  Node.js 22+, qmd and a logged-in model command line, then runs `memex setup` (which downloads the search models).
+  Optional parts, chosen with `--with`: `second-cli`, `video`, `pdf`, `social`, `deep-search` (the README's Install
+  section says what each adds). Non-interactive: `sh install.sh --yes --lang en --with second-cli,video`.
 - `memex setup --help`: every question has a flag (`--writer`, `--reviewer`, `--openai-base-url`, `--sessions`,
-  `--plugins`, `--schedule`, …), so you can run it non-interactively once you know my answers.
+  `--plugins`, `--login`, `--schedule`, …), so you can run it non-interactively once you know my answers.
 - `memex doctor` (add `--json` to parse it): what is installed, configured and reachable, with a fix for each gap.
-- `memex config show`, `memex secret set <NAME>` (stores a key in the system keychain; it prompts me for the value),
-  `memex reindex`, `memex search`, `memex schedule install|list|remove`.
-- The README and `docs/architecture.md` explain models, costs, scheduling and what leaves the machine.
+- `memex models status|pull`, `memex login <site>`, `memex cookies status|refresh`, `memex config show`,
+  `memex secret set <NAME>` (stores a key in the system keychain; it prompts me for the value), `memex reindex`,
+  `memex search`, `memex schedule install|list|remove`.
+- The README and `docs/architecture.md` explain models, costs, logins, scheduling and what leaves the machine.
 
 **Ask me first, every time:**
+- which optional parts to install (say what each adds and how big its download is);
 - before anything that needs sudo, changes my shell configuration, or installs system packages;
-- before downloads over 500 MB (qmd's models are about 2.2 GB, the speech model about 550 MB);
 - which model backends to use for which role, if more than one choice is reasonable (say what each costs: subscription
   logins count against my plan; API keys are billed per token; local models are free but weaker);
 - before enabling collectors that use my logins (X, Bilibili, YouTube) or reading my agent sessions;
 - before installing the scheduled jobs;
 - before editing my agents' instruction files.
 
+**Logins:** run the login commands yourself (`claude auth login`, `codex login`, `memex login <site>`). Each opens a
+page or a window where I log in; tell me it is there and wait for it to finish. Never type, ask for or handle my
+passwords, codes or tokens.
+
 **Never:**
 - put API keys or tokens in files, command lines or chat; I enter them myself when `memex secret set` asks;
-- log in to services on my behalf; tell me what to run (for example `codex login`) and wait;
 - change proxy, network or other global settings to make an install work; if the network blocks a download, tell me
   what failed and what the options are.
 

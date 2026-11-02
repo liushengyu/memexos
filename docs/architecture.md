@@ -95,6 +95,18 @@ the event log, locks, review reports, run directories, usage data. The search in
 
 Raw files are never edited. A newer version of a source is a new file.
 
+**Logins for the collectors.** X, YouTube and Bilibili need the owner's login. MemexOS keeps a browser profile of its
+own (`~/.local/share/memexos/browser`, mode 700) and drives Chrome, Chromium, Edge or Brave through the DevTools
+protocol over a pipe (`--remote-debugging-pipe`: no network port, so no other program can attach). `memex login <site>`
+opens a window on that profile at the login page and closes it once the site's login cookie appears. Before a
+collector needs the cookies (when the copy is older than six hours) MemexOS opens the site in the profile without a
+window, lets the site renew its cookies, checks that the login is still there, and writes only that site's cookies to
+`~/.config/memexos/cookies/<site>.txt` (mode 600) for yt-dlp and twitter-cli. Nothing reads the owner's everyday
+browser, which macOS does not allow scheduled jobs to do anyway, so this works unattended and agents can run
+`memex cookies refresh`. A login the site has ended is recorded (`login.expired` event), shown by `memex status` and
+the console, and announced once with a desktop notification; collectors also report it when a site's API rejects the
+login. Both folders are on the list agents are never allowed to read.
+
 ## Classification
 
 Every raw file gets a catalog entry (`.memex/catalog.jsonl`): domain (from the taxonomy in `.memex/taxonomy.md`),
@@ -137,6 +149,50 @@ show each hit's kind, its classification and, for raw files, the wiki page compi
 page, `memex catalog` filters sources by domain and evidence, and `memex help` gives agents one screen of rules for
 using the knowledge base (cite pages, copy numbers exactly, word claims by evidence strength, say "not in the base").
 
+The model doing the asking decides when to search: the agent instructions the README suggests tell it to search
+whenever a question touches what the owner has read, done or decided, and to pass the topical words as `--kw` next to
+the question. MemexOS never answers by itself; it returns pages and the agent reads them.
+
+### Storage and indexes
+
+The markdown files in the vault are the only source of truth. Everything else is derived from them and can be thrown
+away and rebuilt:
+
+| Store | What is in it | Where | Built when |
+|---|---|---|---|
+| Full-text index | pre-tokenized text of `wiki/`, `raw/` and `inbox/` (CJK as bigrams, Porter stemming for words), file sizes and times; not the text itself | SQLite (Python's built-in `sqlite3`), `~/.cache/memexos/search/<vault id>.sqlite` | `memex init`, then every `memex reindex`: after each publish and every 15 minutes; incremental by size and modification time |
+| Vector index | chunks of every markdown file with their embeddings | qmd's own SQLite with `sqlite-vec`, `~/.cache/qmd/memexos-<vault id>.sqlite` | the same reindex, after the full-text index, under its own lock |
+| Link graph | pages and the `[[links]]` between them | not stored: the console computes it from the wiki files when asked | on demand |
+
+There is no separate entity or relation extraction: the writer agent creates entity and concept pages and links them
+while compiling, and those pages pass gate 1 (every link must resolve or be a declared page-to-be; near misses are
+errors) and gate 2 like any other text. The graph is exactly the wiki's links, so it cannot disagree with the wiki.
+
+Consistency comes from deriving everything from the files and re-deriving it often. A reindex asked for while one is
+running is not dropped; the running one goes once more when it finishes, so pages published mid-run are picked up.
+The full-text index is checked for damage once a day (SQLite's `quick_check` and the FTS5 integrity check) and rebuilt
+from the files when damaged; a search that meets a damaged index scans the files directly, says so, and the next
+reindex rebuilds it. qmd's configuration is generated from `[search.qmd]` on every reindex; when the embedding model
+changes, everything is embedded again and search keeps to the full-text index until that has finished, so vectors from
+two models are never mixed.
+
+**Chunks and embeddings.** qmd cuts each file into chunks of at most 900 tokens, counted with the embedding model's
+own tokenizer, with 15 % overlap. It does not cut blindly at 900: it looks back up to 200 tokens for the best place,
+preferring a heading (an H1 over an H2 over an H3), then a code fence or a horizontal rule, then a paragraph break,
+never inside a code block, and each chunk is embedded together with its page title. A typical wiki page is one or two
+chunks. MemexOS keeps this chunking rather than adding its own: the writer already splits knowledge into pages by topic
+and into sections with headings, so cuts at headings follow the meaning, and a chunk only has to lead to its page,
+which the agent then reads whole. Whether another chunking would find the right pages more often is a question for
+`memex eval retrieval l1` on your own knowledge base (docs/evals.md). The embedding model is chosen by language (`embed_model = "auto"`): Qwen3-Embedding-0.6B for
+Chinese, qmd's default embeddinggemma otherwise. All models run locally and are downloaded once by
+`memex models pull`, which never deletes a model already downloaded.
+
+**A query** goes to both indexes: BM25 over the full-text index (the agent's keywords as phrases, the question as
+content words), and plain vector similarity with the question through qmd's library. (`qmd vsearch` would first
+rewrite the question with a 1.7B language model; MemexOS gets that kind of help from the asking agent's keywords
+instead, and keeps qmd's query expansion for `--mode deep`.) The two ranked lists are merged by reciprocal-rank fusion
+(score = Σ 1/(60 + rank)), and the top candidates are reordered by a local reranker (Qwen3-Reranker, run through qmd's
+bundled llama.cpp) when it is downloaded. Without qmd, search uses the full-text index alone.
 ## The loop back
 
 - **Usage**: `memex usage` reads agent session logs to see what agents searched and opened and whether it helped

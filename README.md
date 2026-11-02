@@ -139,24 +139,35 @@ from the writer, so the writer's blind spots are not reviewed by the same blind 
 
 ## Install
 
-You need macOS or Linux (on Windows, use WSL), git and curl. The installer sets up everything else, asking first:
+You need macOS or Linux (on Windows, use WSL), git and curl. The installer sets up everything else:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/liushengyu/memexos/main/install.sh | sh
 ```
 
-It installs, in this order:
+**Always installed**, because MemexOS does not work fully without them:
 
 1. **MemexOS** itself, with [uv](https://docs.astral.sh/uv) (which brings its own Python).
 2. **Node.js 22+ and [qmd](https://github.com/tobi/qmd)**, the local search engine (vector search and reranking, all on
-   your machine), then qmd's models, about 2.2 GB. Without qmd, search still works with the built-in full-text index.
-3. Optional: **yt-dlp, ffmpeg, whisper.cpp** and a speech model (for videos without subtitles) and **poppler** (PDFs).
-4. A model backend if you have none: it can install the Claude Code or Codex command line for you to log in to.
-5. `memex setup`: a few questions, then your knowledge base is created (with sample content if you like).
+   your machine).
+3. **A model command line you are logged in to**: Claude Code or Codex. If you have neither, it installs one and
+   opens the login page in your browser. **No API key is needed**; see [Models](#models).
+4. **`memex setup`**: a few questions, then your knowledge base (with sample content if you like) and the search
+   models (about 1 GB, downloaded once; Qwen3-Embedding for a Chinese knowledge base).
+
+**Optional**, you pick from a list (or pass `--with a,b,c`):
+
+| | What it adds | Installs |
+|---|---|---|
+| `second-cli` (recommended) | writing and reviewing by different model families | the other of Claude Code / Codex, logged in |
+| `video` | videos and podcasts, also without subtitles | yt-dlp, ffmpeg, whisper.cpp, a speech model (~550 MB) |
+| `pdf` | PDFs | poppler |
+| `social` | what you save on X, YouTube and Bilibili | twitter-cli, yt-dlp, and a browser for the one-time logins if you have no Chrome, Chromium, Edge or Brave |
+| `deep-search` | `memex search --mode deep` (query expansion) | qmd's expansion model (~1.3 GB) |
 
 Prefer to have your agent do it? Give Claude Code or Codex the prompt in [docs/install-prompt.md](docs/install-prompt.md).
-By hand: `uv tool install --with anthropic git+https://github.com/liushengyu/memexos`, `npm install -g @tobilu/qmd`,
-then `memex setup`. `memex doctor` checks everything at any time and says how to fix what is missing.
+`sh install.sh --help` lists the options; it can be run again at any time and skips what is installed.
+`memex doctor` checks everything and says how to fix what is missing.
 
 ## Quick start
 
@@ -193,6 +204,11 @@ knowledge base has nothing.
 ```
 
 ## Models
+
+**No API key needed.** MemexOS runs its model work through the **Claude Code or Codex command line you are already
+logged in to**, with your subscription (Claude Pro/Max, ChatGPT Plus/Pro) or whatever those tools are logged in with.
+`memex setup` puts them first. API keys (Anthropic, OpenAI, DeepSeek, …) and local model servers (Ollama, LM Studio,
+vLLM) are optional extras you can add to any role.
 
 Work is split into roles. Each role has a list of backends and uses the first one that is available; when one runs out
 of quota, the next takes over for a while. `memex setup` detects what you have and proposes the lists; `memex doctor`
@@ -285,6 +301,19 @@ MemexOS itself is free. The model calls are what cost money, and only if you pay
 
 The Quality & cost page shows spending per day and per role; `memex pause` stops compiling at any time.
 
+## Logins for X, YouTube and Bilibili
+
+Collecting what you save on those sites needs your login. MemexOS keeps a **browser profile of its own** for this
+(not your everyday browser): `memex login x` opens a window at the site's login page, you log in once, and the window
+closes by itself. From then on MemexOS keeps the login alive without you: before a collector runs, it opens the site
+in that profile without a window, lets the site renew its cookies, and hands them to the tools. Scheduled jobs and
+agents can do this (`memex cookies refresh`), because nothing has to read your everyday browser.
+
+When a site really ends the session, MemexOS does not fail quietly: `memex status` and the console show it, and you
+get one desktop notification. `memex login <site>` (or **Log in** in the console's command palette) opens the window
+again. On a machine without a screen, `memex login x --cookies cookies.txt` takes a cookie file exported elsewhere,
+and `--from-browser chrome` copies the login from an everyday browser once.
+
 ## Scheduling
 
 `memex schedule install` installs per-user jobs (launchd on macOS, systemd user units on Linux, cron elsewhere):
@@ -299,10 +328,10 @@ them; `memex schedule remove` takes them out. Times and steps are in `[schedule]
 | Read | `search`, `get`, `catalog`, `help` |
 | Add | `add-url`, `add-video`, `feedback` |
 | Compile | `ingest`, `fix`, `correct`, `lint`, `pause`, `resume` |
-| Collect | `intake`, `sessions`, `cookies` (plugins) |
+| Collect | `intake`, `sessions`, `login`, `cookies` (plugins) |
 | Decide | `inbox`, `console` |
 | Watch | `status`, `usage`, `eval` |
-| Set up | `setup`, `init`, `doctor`, `config`, `secret`, `schedule` |
+| Set up | `setup`, `init`, `doctor`, `config`, `secret`, `schedule`, `models`, `reindex` |
 
 ## Configuration
 
@@ -315,8 +344,10 @@ The interface, rules, prompts and logs come in English and Chinese (`memex init 
 
 - Text sent to the model backends you configure, as those tools always do.
 - Optional services, only when you turn them on: a reader service for hard-to-fetch pages, the Jev judge.
+- Downloads: the search models (once, from Hugging Face) and the pages and videos you collect.
 - Nothing else. The console listens on 127.0.0.1 only. Collectors that need your logins (X, Bilibili, YouTube) are
-  plugins, off until you enable them.
+  plugins, off until you enable them; their logins stay in MemexOS's browser profile and cookie files on your
+  computer (readable only by you, and not by the agents MemexOS runs).
 
 ## Documentation
 

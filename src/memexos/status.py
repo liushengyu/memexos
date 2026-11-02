@@ -66,10 +66,8 @@ def snapshot(cfg) -> dict:
     if held:
         warn.append(i18n.t("status.held", n=len(held)))
     from memexos.capture import cookies
-    for site in cookies.SITES:
-        p = cookies.path(cfg, site)
-        if cookies.browser(cfg, site) and p.exists() and now - p.stat().st_mtime > 14 * 86400:
-            warn.append(i18n.t("status.cookies_old", site=site, days=int((now - p.stat().st_mtime) / 86400)))
+    for site in cookies.needs_login(cfg):
+        alerts.append(i18n.t("status.login_needed", site=cookies.SITES[site].name, cmd=f"memex login {site}"))
     fails = [e for e in today if e["type"] in ("ingest.failed", "intake.channel_failed", "capture.failed", "classify.failed", "visual.failed")]
     if fails:
         warn.append(i18n.t("status.failures", n=len(fails), last=events.render(fails[-1])[:160]))
