@@ -845,6 +845,13 @@ inbox_tip = "编写 Agent 拿不准、要你拍板的事"
 inbox_waiting = "件等你决定"
 search = "搜索"
 search_tip = "找页面、跳转、执行操作"
+settings = "设置"
+settings_tip = "语言和其他偏好"
+
+[console.set]
+title = "设置"
+language = "语言"
+language_hint = "控制台会按所选语言重新加载。"
 
 [console.cmd]
 placeholder = "找页面、跳到某一页、执行操作…"
@@ -1368,6 +1375,8 @@ busy = "另一个任务占着写锁，稍后再试"
 abandoned = "已放弃 {branch}；它的 {n} 份原始资料重新排队"
 accepted = "{n} 件已按建议记下，之后和你单独点的一样执行"
 unknown = "不认识的操作"
+cannot_save = "设置文件写不进去"
+language_set = "语言已切换为 {lang}"
 
 [console.cli]
 serving = "MemexOS 控制台：{url}"

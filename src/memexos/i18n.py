@@ -27,6 +27,7 @@ def language() -> str:
 
 
 @functools.cache
+@functools.cache
 def available() -> tuple[str, ...]:
     return tuple(sorted(p.name[:-5] for p in resources.files("memexos").joinpath("locale").iterdir()
                         if p.name.endswith(".toml")))

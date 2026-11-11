@@ -57,8 +57,6 @@ class Console:
         self.token = secrets.token_urlsafe(24)
         self.host = str(cfg.get("console.host") or "127.0.0.1")
         self.port = int(cfg.get("console.port") or 8765)
-        self.lang = i18n.language()
-        self.strings = ui_strings(self.lang)
         self.routes = {"/api/live": self.data.live, "/api/overview": self.data.overview, "/api/graph": self.data.graph,
                        "/api/pages": self.data.page_list, "/api/page": self.data.page, "/api/resolve": self.data.resolve,
                        "/api/search": self.data.search, "/api/runs": self.data.run_list, "/api/run": self.data.run_detail,
@@ -66,11 +64,16 @@ class Console:
                        "/api/quality": self.data.quality, "/api/profile": self.data.profile}
 
     def index(self, nonce: str) -> bytes:
+        # Resolved per request, not once in __init__: the console changes the language itself through the
+        # set-language action, and the reload has to come back in the new one.
+        lang = i18n.language()
+        strings = ui_strings(lang)
         page = (STATIC / "index.html").read_text(encoding="utf-8")
-        boot = json.dumps({"lang": self.lang, "s": self.strings, "token": self.token,
+        boot = json.dumps({"lang": lang, "s": strings, "token": self.token,
+                           "langs": list(i18n.available()),
                            "profile": bool(self.cfg.get("console.profile_page"))}, ensure_ascii=False).replace("</", "<\\/")
-        page = page.replace("__BOOT__", boot).replace("__NONCE__", nonce).replace("__LANG__", self.lang)
-        return _fill(page, self.strings).encode("utf-8")
+        page = page.replace("__BOOT__", boot).replace("__NONCE__", nonce).replace("__LANG__", lang)
+        return _fill(page, strings).encode("utf-8")
 
 
 def _fill(page: str, strings: dict[str, str]) -> str:

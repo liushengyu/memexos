@@ -22,6 +22,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from memexos import i18n
 from memexos.util import expand
 
 ENV_PREFIX = "MEMEX_"
@@ -191,7 +192,7 @@ class Config:
     @property
     def language(self) -> str:
         lang = str(self.get("language", "en")).lower()
-        return lang if lang in ("en", "zh") else "en"
+        return lang if lang in i18n.available() else i18n.FALLBACK
 
     @property
     def vault(self) -> Path:

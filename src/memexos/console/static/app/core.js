@@ -496,6 +496,21 @@ $("#cmdk input").addEventListener("keydown", e => { if (e.key === "ArrowDown") {
   else if (e.key === "Enter") { e.preventDefault(); const on = $("#cmdk .ci.on"); if (!on) return; const r = on.getBoundingClientRect(); Cmdk.pick(Cmdk.idx, {clientX: r.left + 40, clientY: r.top + 10}); } });
 $("#cmdk .res").addEventListener("click", e => { const c = e.target.closest(".ci"); if (c) Cmdk.pick(+c.dataset.i, e); });
 $("#cmdk-btn").onclick = () => Cmdk.show();
+// settings: the languages come from the server (BOOT.langs = i18n.available()), never a list kept here
+const LANG_NAME = {en: "English", es: "Español", zh: "中文"};
+$("#set-btn").onclick = async e => {
+  const langs = (BOOT.langs && BOOT.langs.length) ? BOOT.langs : [LANG];
+  const pick = await modal({
+    title: T("set.title"),
+    html: `<div class="muted" style="margin-bottom:10px">${esc(T("set.language_hint"))}</div>`,
+    actions: [...langs.map(l => ({label: LANG_NAME[l] || l, primary: l === LANG, value: l})),
+              {label: T("c.close"), value: null}],
+    origin: e,
+  });
+  if (!pick || pick === LANG) return;
+  const r = await doAction(e, "set-language", {lang: pick}, {title: T("set.language")});
+  if (r && r.ok) location.reload();
+};
 $("#scrim").addEventListener("click", () => { if (Cmdk.open) Cmdk.hide(); else if ($("#drawer").classList.contains("on")) closeDrawer(); });
 document.addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); Cmdk.open ? Cmdk.hide() : Cmdk.show(); return; }

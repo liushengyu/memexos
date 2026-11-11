@@ -848,6 +848,13 @@ inbox_tip = "Questions the writer agent could not settle and needs you to decide
 inbox_waiting = "waiting for you"
 search = "Search"
 search_tip = "Find a page, go somewhere, run an action"
+settings = "Settings"
+settings_tip = "Language and other preferences"
+
+[console.set]
+title = "Settings"
+language = "Language"
+language_hint = "The console reloads in the chosen language."
 
 [console.cmd]
 placeholder = "Find a page, go to a view, run an action…"
@@ -1371,6 +1378,8 @@ busy = "Another job holds the write lock; try again in a moment"
 abandoned = "Discarded {branch}; its {n} raw sources are queued again"
 accepted = "{n} recorded as recommended; they are carried out like your own choices"
 unknown = "Unknown action"
+cannot_save = "The settings file could not be written"
+language_set = "Language set to {lang}"
 
 [console.cli]
 serving = "MemexOS console: {url}"
