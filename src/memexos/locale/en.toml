@@ -21,6 +21,7 @@ Next steps:
 
 [backend]
 not_logged_in = "`{cmd}` is installed but not logged in: run `{login}` once"
+cannot_start = "`{cmd}` is installed but does not start: {why}"
 settings_env_hint = "(Your Claude Code login is in the env block of ~/.claude/settings.json; set [backends.claude-code] settings_env = true so unattended runs use it.)"
 cmd_missing = "command `{cmd}` not found"
 no_sdk = "the anthropic package is not installed (uv tool install --with anthropic memexos, or pip install \"memexos[anthropic]\")"

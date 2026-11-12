@@ -21,6 +21,7 @@ next = """
 
 [backend]
 not_logged_in = "`{cmd}` 已安装但没有登录：先运行一次 `{login}`"
+cannot_start = "`{cmd}` 装了但启动不了：{why}"
 settings_env_hint = "（你的 Claude Code 登录写在 ~/.claude/settings.json 的 env 里；把 [backends.claude-code] settings_env 设为 true，无人值守时才用得上。）"
 cmd_missing = "找不到命令 `{cmd}`"
 no_sdk = "没装 anthropic 包（uv tool install --with anthropic memexos，或 pip install \"memexos[anthropic]\"）"
