@@ -39,7 +39,7 @@ if name == "claude":
         sys.exit(0)
     out = {"type": "result", "is_error": reply.get("is_error", False), "result": reply.get("result", "done"),
            "num_turns": 2, "total_cost_usd": 0.0123, "permission_denials": reply.get("denials", []),
-           "modelUsage": {"claude-test-model": {"inputTokens": 100, "outputTokens": 20, "cacheReadInputTokens": 0,
+           "modelUsage": {reply.get("model", "claude-test-model"): {"inputTokens": 100, "outputTokens": 20, "cacheReadInputTokens": 0,
                                                 "cacheCreationInputTokens": 0}}}
     if "structured" in reply:
         out["structured_output"] = reply["structured"]

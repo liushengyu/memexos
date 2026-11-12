@@ -110,11 +110,13 @@ def render(vault: Path, d: Path, status: str) -> str:
     return "\n".join(out) + "\n"
 
 
-def for_writer(dirs: list[Path]) -> tuple[int, str]:
-    """Numbered problem list for the writer's fix prompt."""
+def for_writer(dirs: list[Path], live: bool = False) -> tuple[int, str]:
+    """Numbered problem list for the writer's fix prompt. `live` leaves out problems a later review already checked."""
     lines, n = [], 0
+    if live:
+        from memexos.pipeline import fixqueue
     for d in dirs:
-        for p in problems(d):
+        for p in (fixqueue.live(d) if live else problems(d)):
             n += 1
             lines.append(i18n.t("report.item", n=n, kind=i18n.t("report.kind." + p["kind"]), sev=i18n.t("report.sev." + SEVERITY[p["kind"]]),
                                 page=p["page"], wiki=p["wiki"] or "-",

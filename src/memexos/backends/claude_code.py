@@ -8,6 +8,7 @@ not fail the run; they are returned in Result.denials so callers can log what ca
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
@@ -41,6 +42,13 @@ def _rule(p) -> str:
     """A permission-rule path: "//abs/path/**" for a directory (Claude Code reads "//" as an absolute path)."""
     p = Path(p).resolve()
     return f"/{p}/**" if p.is_dir() or not p.suffix else f"/{p}"
+
+
+def same_family(want: str, used: str) -> bool:
+    """'opus', 'opus[1m]', 'claude-opus-5-5' all ask for an Opus model; a full id must match the family it names."""
+    w = re.sub(r"\[.*\]$", "", want).lower()
+    family = next((f for f in ("opus", "sonnet", "haiku") if f in w), w)
+    return family in used.lower()
 
 
 class ClaudeCode(Backend):
@@ -109,10 +117,14 @@ class ClaudeCode(Backend):
             return res
         text = str(j.get("result") or "")
         res.text = text
-        mu = next(iter((j.get("modelUsage") or {}).items()), (None, {}))
-        if mu[0]:
-            res.model = res.model or mu[0]
-        u = mu[1] or {}
+        mu = j.get("modelUsage") or {}
+        # The model that did the work (the one with the most output; small helper models may be listed too). Recorded
+        # as what actually ran, not what was asked for: an unset model follows the CLI's default, and that default
+        # can change with the login method.
+        used = max(mu, key=lambda k: (mu[k] or {}).get("outputTokens", 0)) if mu else ""
+        if used:
+            res.model = used
+        u = mu.get(used) or {}
         res.usage = {"input_tokens": u.get("inputTokens", 0), "cache_read_tokens": u.get("cacheReadInputTokens", 0),
                      "cache_write_tokens": u.get("cacheCreationInputTokens", 0), "output_tokens": u.get("outputTokens", 0),
                      "turns": j.get("num_turns")}
@@ -124,6 +136,10 @@ class ClaudeCode(Backend):
             res.tail = text[-600:]
             res.limited = bool(QUOTA_RE.search(text))
             res.transient = not res.limited and (j.get("api_error_status") in TRANSIENT_STATUS or bool(NETWORK_RE.search(text)))
+            return res
+        want = str(self.section.get("model") or "")
+        if used and want and not same_family(want, used):
+            res.tail = f"model mismatch: configured {want}, the CLI ran {used}; the result is discarded"
             return res
         if schema is not None:
             res.result = j.get("structured_output")

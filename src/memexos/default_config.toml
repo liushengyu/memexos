@@ -40,7 +40,10 @@ judge = ["claude-code:sonnet", "codex"]
 
 [backends.claude-code]
 command = "claude"
-model = ""          # empty = the CLI's default model
+# empty = the CLI's default model. That default can change with how you log in, so set it (for example "opus") to
+# pin it. Every call
+# records the model that actually ran, and a call that ran a different family than the one set here is discarded.
+model = ""
 effort = "high"
 proxy = ""          # empty = inherit the environment; "direct" = no proxy; or a URL
 # After a backend reports an exhausted quota, skip it for this long, then try again.
@@ -252,7 +255,11 @@ gate1_fix_rounds = 2
 gate2 = "enforce"         # enforce | off (only for debugging)
 gate2_fix_rounds = 2
 selfcheck = "on"
-fix_max_reviews = 4
+# `memex fix` takes the worst problems first: about fix_max_problems per run, from at most fix_max_reviews reviews
+fix_max_reviews = 8
+fix_max_problems = 40
+# The writer did not finish this many times in a row for reasons other than a usage limit: hold the files for a person
+writer_failures_hold = 3
 correct_max = 6
 
 [taxonomy]
