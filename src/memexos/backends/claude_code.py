@@ -14,7 +14,7 @@ from pathlib import Path
 
 from memexos import i18n
 from memexos.backends.base import (LOGIN_TTL, NETWORK_RE, QUOTA_RE, READ_ONLY_NOTE, SECRET_PATHS, TRANSIENT_STATUS, Backend, Policy,
-                                   Result, parse_json_text)
+                                   Result, parse_json_text, start_failure)
 from memexos.util import proxy_env, run, which
 
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
@@ -82,8 +82,15 @@ class ClaudeCode(Backend):
         given the benefit of the doubt."""
         try:
             r = run([exe, "auth", "status", "--json"], env=self.env(), timeout=30)
+        except OSError as e:
+            return False, i18n.t("backend.cannot_start", cmd=exe, why=start_failure(error=e))
+        except Exception:  # noqa: BLE001 — a timeout: cannot tell
+            return True, ""
+        if start_failure(r):
+            return False, i18n.t("backend.cannot_start", cmd=exe, why=start_failure(r))
+        try:
             j = json.loads(r.stdout or "{}")
-        except Exception:  # noqa: BLE001 — no such subcommand, or no JSON: cannot tell
+        except ValueError:      # an older CLI without `auth status --json`: cannot tell
             return True, ""
         if j.get("loggedIn") is False:
             return False, i18n.t("backend.not_logged_in", cmd="claude", login="claude auth login") + \

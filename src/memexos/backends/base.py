@@ -77,6 +77,16 @@ class Backend:
         raise NotImplementedError
 
 
+def start_failure(r=None, error: BaseException | None = None) -> str:
+    """Why a command line could not even start (missing interpreter, not executable), or "" if it ran. A login check
+    gives an older CLI without the check the benefit of the doubt, but must not do so for one that cannot start."""
+    if isinstance(error, OSError):
+        return str(error)[-200:]
+    if r is not None and r.returncode in (126, 127):          # the shell's "cannot execute" / "not found"
+        return ((r.stderr or "") + (r.stdout or "")).strip()[-200:] or f"exit {r.returncode}"
+    return ""
+
+
 def parse_json_text(text: str) -> Any:
     """JSON from a model's final text: the whole text, else the last fenced or brace-delimited block."""
     text = (text or "").strip()
