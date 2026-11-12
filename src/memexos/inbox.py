@@ -97,8 +97,8 @@ def parse_candidates(cfg) -> list[dict]:
                           "title": i18n.t("inbox.cand_title", key=key), "body": reason, "key": key, "url": url, "batch": "",
                           "triage": {"kind": "decide", "why": i18n.t("inbox.cand_why"), "question": i18n.t("inbox.cand_question"),
                                      "context": i18n.t("inbox.cand_context", reason=reason, url=url or "-"),
-                                     "options": [{"label": i18n.t("inbox.keep"), "effect": i18n.t("inbox.keep_effect")},
-                                                 {"label": i18n.t("inbox.drop"), "effect": i18n.t("inbox.drop_effect")}],
+                                     "options": [{"label": i18n.t("inbox.keep"), "effect": i18n.t("inbox.keep_effect"), "action": "keep"},
+                                                 {"label": i18n.t("inbox.drop"), "effect": i18n.t("inbox.drop_effect"), "action": "drop"}],
                                      "recommend": -1, "recommend_why": "", "pages": []}})
     return items
 
@@ -118,8 +118,8 @@ def parse_blocked(cfg) -> list[dict]:
                                      "why": i18n.t("inbox.blocked_why" if alive else "inbox.blocked_gone"),
                                      "question": i18n.t("inbox.blocked_question", branch=branch),
                                      "context": (re.search(r"^- (?:reason|原因)[:：]\s*(.*)$", body, re.M) or [None, ""])[1],
-                                     "options": [{"label": i18n.t("inbox.discard"), "effect": i18n.t("inbox.discard_effect")},
-                                                 {"label": i18n.t("inbox.leave"), "effect": i18n.t("inbox.leave_effect")}],
+                                     "options": [{"label": i18n.t("inbox.discard"), "effect": i18n.t("inbox.discard_effect"), "action": "discard"},
+                                                 {"label": i18n.t("inbox.leave"), "effect": i18n.t("inbox.leave_effect"), "action": "leave"}],
                                      "recommend": 0, "recommend_why": i18n.t("inbox.discard_why"), "pages": []}})
     return items
 
@@ -344,6 +344,24 @@ def queue(cfg, max_n: int) -> list[dict]:
     return (human + agent)[:max_n]
 
 
+def chosen(it: dict) -> dict | None:
+    """The option a decision picked. By its position: candidate and held-branch options are rebuilt in the current
+    language every time, so the label saved with the decision may be in another language than the options now.
+    Older decisions saved without a position are matched by label, in every language pack."""
+    d, opts = it.get("decision") or {}, (it.get("triage") or {}).get("options") or []
+    if isinstance(d.get("choice"), int) and 0 <= d["choice"] < len(opts):
+        return opts[d["choice"]]
+    label = d.get("label") or ""
+    if not label:
+        return None
+    for o in opts:
+        if o["label"] == label:
+            return o
+        if o.get("action") and label in {i18n.t(f"inbox.{o['action']}", lg) for lg in i18n.available()}:
+            return o
+    return None
+
+
 def script_actions(cfg) -> set[str]:
     """Decisions that need no writer: intake candidates, category decisions, held branches. Returns files to commit."""
     from memexos.capture.add import add
@@ -352,8 +370,9 @@ def script_actions(cfg) -> set[str]:
         d = it["decision"]
         label, note, ok = d.get("label") or "", "", True
         try:
+            opt = chosen(it)
             if it["src"] == "candidate":
-                keep = label == i18n.t("inbox.keep") or (d.get("text") and not label)
+                keep = (opt or {}).get("action") == "keep" or bool(d.get("text") and not label)
                 if keep:
                     if not it.get("url"):
                         raise RuntimeError(i18n.t("inbox.no_url"))
@@ -367,7 +386,6 @@ def script_actions(cfg) -> set[str]:
                 changed.add(".memex/admission.jsonl")
             elif it["src"] == "taxonomy":
                 from memexos.catalog import classify as C
-                opt = next((o for o in (it["triage"] or {}).get("options") or [] if o["label"] == label), None)
                 if opt:
                     note, files = C.decide(cfg, it["node_id"], opt.get("action"), into=opt.get("into", ""), why=d.get("text") or "")
                 elif d.get("text"):
@@ -380,7 +398,7 @@ def script_actions(cfg) -> set[str]:
                     raise RuntimeError(f"unknown decision: {label}")
                 changed.update(files)
             elif it["src"] == "blocked":
-                if label == i18n.t("inbox.discard"):
+                if (opt or {}).get("action") == "discard":
                     subprocess.run(["git", "-C", str(cfg.vault), "branch", "-D", it["branch"]], capture_output=True, stdin=subprocess.DEVNULL)
                     note = i18n.t("inbox.branch_deleted")
                 else:
@@ -414,7 +432,7 @@ def apply_prompt(cfg, q: list[dict]) -> str:
         tri = it["triage"] or {}
         if it["status"] == "decided":
             d = it["decision"]
-            opt = next((o for o in tri.get("options") or [] if o["label"] == (d.get("label") or "")), None)
+            opt = chosen(it)
             fb = save_human_feedback(cfg, it) if (d.get("text") or "").strip() else ""
             what = (i18n.t("inbox.chose", label=opt["label"], effect=opt["effect"]) if opt else "") + \
                 (i18n.t("inbox.added_text", text=d["text"]) if d.get("text") else "") + (i18n.t("inbox.fb_saved", path=fb) if fb else "")
