@@ -67,9 +67,43 @@ def abandon(cfg, branch: str) -> tuple[bool, str]:
     return True, i18n.t("console.msg.abandoned", branch=branch, n=len(raws))
 
 
+def set_language(cfg, lang: str) -> tuple[bool, str]:
+    """Persist the console's language and apply it to this process.
+
+    Writes where `memex setup` writes (the user config) with the same guarantees:
+    mode 0600, atomic replace, and a parse before the replace so a broken
+    settings file is never left behind.
+    """
+    from memexos import config as config_mod
+
+    lang = (lang or "").strip()
+    if lang not in i18n.available():
+        return False, i18n.t("console.msg.unknown")
+    ucfg = config_mod.user_config_path()
+    try:
+        text = ucfg.read_text(encoding="utf-8") if ucfg.exists() else config_mod.default_config_text()
+    except OSError:
+        return False, i18n.t("console.msg.cannot_save")
+    if re.search(r"(?m)^language\s*=", text):
+        text = re.sub(r'(?m)^language\s*=.*$', f'language = "{lang}"', text, count=1)
+    else:
+        text = f'language = "{lang}"\n' + text
+    ucfg.parent.mkdir(parents=True, exist_ok=True)
+    tmp = ucfg.with_suffix(".toml.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    import tomllib
+    tomllib.loads(tmp.read_text(encoding="utf-8"))
+    tmp.replace(ucfg)
+    i18n.set_language(lang)
+    return True, i18n.t("console.msg.language_set", lang=lang)
+
+
 def act(cfg, body: dict) -> tuple[bool, str]:
     a = body.get("action")
     pause = cfg.paths.state / "PAUSE"
+    if a == "set-language":
+        return set_language(cfg, str(body.get("lang", "")))
     if a == "pause":
         pause.parent.mkdir(parents=True, exist_ok=True)
         pause.write_text(f"paused from the console at {time.strftime('%F %T')}\n", encoding="utf-8")
