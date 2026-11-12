@@ -24,6 +24,7 @@ from pathlib import Path
 
 from memexos import backends, events, i18n, lock, rawref
 from memexos.pipeline import gate1, gate2, report, selfcheck
+from memexos.pipeline import fixqueue
 from memexos.pipeline.stage import Stage, add_to_ledger, git, ledger, next_batch, pending_feedback, pending_raw
 
 
@@ -48,6 +49,7 @@ class Writer:
         self.cfg, self.stage, self.job = cfg, stage, job
         self.last = ""          # the writer's final summary line
         self.report = ""        # last gate 1 report (JSON text) or failure reason
+        self.limited = False    # the last failure was a usage limit (temporary: wait for the reset, do not count it)
 
     def policy(self) -> backends.Policy:
         d = self.stage.dir
@@ -83,6 +85,7 @@ class Writer:
                 p = prompt + "\n\n" + i18n.t("pipeline.resume_note")
                 continue
             self.report = i18n.t("pipeline.writer_failed", backend=r.backend, why=r.tail[-300:])
+            self.limited = r.limited
             return 1
         lines = (r.text or "").strip().splitlines()
         self.last = lines[-1][:500] if lines else ""
@@ -103,6 +106,7 @@ class Writer:
             r = self._step("rework", i18n.prompt("rework_gate1", kind=kind, report=fence(self.report)), reason="gate1")
             if not r.ok:
                 self.report = i18n.t("pipeline.writer_failed", backend=r.backend, why=r.tail[-300:])
+                self.limited = r.limited
                 return 1
             self.last = (r.text or "").strip()[-500:]
         return 2
@@ -118,6 +122,10 @@ def review(cfg, stage: Stage, raws: list[str], mode: str, job: str) -> tuple[int
     if (cfg.get("pipeline.gate2") or "enforce") == "off":
         return 4, {}, Path()
     d = g2_dir(cfg, stage, mode)
+    try:        # the pages this review reads, so a later round can tell which flagged sentences were rewritten
+        fixqueue.snapshot(stage.dir, stage.base, d)
+    except Exception:  # noqa: BLE001 — without a snapshot the round simply stays in the fix queue
+        pass
     with events.step(cfg.paths.state, "gate2", mode=mode) as info:
         code, rep = gate2.run(cfg, stage.dir, stage.base, raws, d, mode=mode, job=job)
         m = rep.get("metrics") or {}
@@ -202,6 +210,32 @@ def review_loop(cfg, stage: Stage, writer: Writer, raws: list[str], mode: str, f
         code, rep, d = review(cfg, stage, raws, "fix", job)
 
 
+def writer_failed(cfg, stage: Stage, w: Writer, files: list[str]) -> None:
+    """The writer did not finish (usage limit, network, a crash): not a quality problem, so the attempt is thrown away and
+    the files stay queued (held files are never retried, so holding them for a usage limit lost them for good). A usage
+    limit is not counted; any other failure holds the files after `pipeline.writer_failures_hold` attempts in a row, so
+    one bad file does not burn a run every hour."""
+    n = 0
+    if not w.limited:
+        p = cfg.paths.state / "writer-failures.json"
+        try:
+            seen = json.loads(p.read_text())
+        except (OSError, ValueError):
+            seen = {}
+        k = " ".join(sorted(files))
+        seen = {a: b for a, b in seen.items() if time.time() - b["ts"] < 7 * 86400}
+        n = seen.get(k, {}).get("n", 0) + 1
+        seen[k] = {"n": n, "ts": time.time()}
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(seen, ensure_ascii=False))
+    limit = int(cfg.get("pipeline.writer_failures_hold") or 3)
+    if files and n >= limit:
+        stage.hold(i18n.t("pipeline.writer_failed_n", n=n), files, w.report)
+        return
+    events.emit(cfg.paths.state, "writer.requeued", files=files, limited=w.limited, attempt=n, why=w.report[-300:])
+    stage.discard(w.report)
+
+
 # ---------------------------------------------------------------- ingest
 def classifications(cfg, raws: list[str]) -> str:
     try:
@@ -229,7 +263,7 @@ def ingest_batch(cfg) -> int:
     c = w.write(prompt, "ingest")
     if c == 1:
         events.emit(cfg.paths.state, "ingest.failed", why=w.report[-300:])
-        stage.discard(w.report)
+        writer_failed(cfg, stage, w, raws)
         return 1
     if c == 2:
         stage.hold(i18n.t("pipeline.gate1_failed", rounds=cfg.get("pipeline.gate1_fix_rounds") or 2), raws, w.report)
@@ -254,13 +288,17 @@ def ingest_batch(cfg) -> int:
     if outcome == "unavailable":
         stage.discard(i18n.t("pipeline.gate2_unavailable"))
         return 1
-    if outcome in ("failed", "writer-failed"):
+    if outcome == "writer-failed":
+        writer_failed(cfg, stage, w, raws)
+        return 1
+    if outcome == "failed":
         stage.hold(i18n.t("pipeline.gate2_failed"), raws, json.dumps(rep.get("errors"), ensure_ascii=False, indent=1))
         return 1
     # The compiled list is written only now: written earlier, gate 1 would see it as a write outside the allowed places.
     add_to_ledger(stage.dir, "ingested.txt", raws)
-    # Failed rounds were handled by the rework; the passing review may still list minor problems for `memex fix`.
-    add_to_ledger(stage.dir, "fixed-reviews.txt", [d.name for d in dirs[:-1]])
+    # A failed round counts as handled only where the rework changed the flagged sentence (the re-review checked it);
+    # the rest of it, and the passing review's minor problems, stay for `memex fix`.
+    add_to_ledger(stage.dir, "fixed-reviews.txt", fixqueue.settle(stage.dir, dirs[:-1]))
     if stage.publish("auto-ingest: " + " ".join(Path(r).name for r in raws)[:900]):
         return 0
     stage.hold(i18n.t("pipeline.merge_failed"), raws)
@@ -371,18 +409,18 @@ def unfixed_reviews(cfg) -> list[Path]:
 
 
 def fix(cfg) -> int:
-    dirs = unfixed_reviews(cfg)[: int(cfg.get("pipeline.fix_max_reviews") or 4)]
-    if not dirs:
+    settle_now, dirs, n = fixqueue.pick(cfg)
+    if not dirs and not settle_now:
         print(i18n.t("pipeline.nothing_to_fix"))
         return 0
-    n, problems = report.for_writer(dirs)
+    _, problems = report.for_writer(dirs, live=True)
     raws = sorted({r for d in dirs for r in report.raws_of(d)})
     try:
         with lock.held(cfg.paths.locks, "write", wait=5400):
             stage = Stage(cfg).open()
             if n == 0:
-                add_to_ledger(stage.dir, "fixed-reviews.txt", [d.name for d in dirs])
-                stage.publish("fix: reviews without problems, recorded")
+                add_to_ledger(stage.dir, "fixed-reviews.txt", [name for name, _ in settle_now] + [d.name for d in dirs])
+                stage.publish("fix: reviews without problems to fix, recorded")
                 return 0
             events.emit(cfg.paths.state, "fix.start", reviews=len(dirs), problems=n)
             for d in dirs:
@@ -394,13 +432,14 @@ def fix(cfg) -> int:
                 return 1
             outcome, vdirs, rep = review_loop(cfg, stage, w, raws, "fix", "fix_passed", "fix",
                                               fix_prompt_key="rework_again", what=i18n.t("pipeline.what_fix"))
-            if outcome == "unavailable":
-                stage.discard(i18n.t("pipeline.gate2_unavailable"))
+            if outcome in ("unavailable", "writer-failed"):      # temporary: throw the attempt away, the reviews stay queued
+                stage.discard(i18n.t("pipeline.gate2_unavailable") if outcome == "unavailable" else w.report)
                 return 1
             if outcome not in ("passed", "off"):
                 stage.hold(i18n.t("pipeline.fix_failed"), [], json.dumps(rep.get("errors"), ensure_ascii=False, indent=1))
                 return 1
-            add_to_ledger(stage.dir, "fixed-reviews.txt", [d.name for d in dirs + vdirs])
+            add_to_ledger(stage.dir, "fixed-reviews.txt",
+                          [name for name, _ in settle_now] + [d.name for d in dirs] + fixqueue.verified(vdirs))
             return 0 if stage.publish(f"fix: {n} problems found by review") else 1
     except lock.Busy:
         print(i18n.t("pipeline.busy"))
@@ -431,7 +470,7 @@ def correct(cfg) -> int:
             w = Writer(cfg, stage, "correct")
             c = w.write(i18n.prompt("correct", n=len(fb), date=today(), feedback=fence(feedback_brief(cfg, fb))), "lint")
             if c != 0:
-                (stage.hold(i18n.t("pipeline.gate1_failed", rounds=2), fb, w.report) if c == 2 else stage.discard(w.report))
+                (stage.hold(i18n.t("pipeline.gate1_failed", rounds=2), fb, w.report) if c == 2 else writer_failed(cfg, stage, w, fb))
                 return 1
             results_file = stage.dir / "inbox" / "correct-results.json"
             try:
@@ -448,11 +487,14 @@ def correct(cfg) -> int:
                 if outcome == "unavailable":
                     stage.discard(i18n.t("pipeline.gate2_unavailable"))
                     return 1
+                if outcome == "writer-failed":
+                    writer_failed(cfg, stage, w, fb)
+                    return 1
                 if outcome not in ("passed", "off"):
                     stage.hold(i18n.t("pipeline.correct_failed"), fb, json.dumps(rep.get("errors"), ensure_ascii=False, indent=1))
                     return 1
             add_to_ledger(stage.dir, "corrected.txt", fb)
-            add_to_ledger(stage.dir, "fixed-reviews.txt", [d.name for d in dirs])
+            add_to_ledger(stage.dir, "fixed-reviews.txt", fixqueue.verified(dirs))
             if not stage.publish(f"correct: applied {len(fb)} pieces of feedback"):
                 stage.hold(i18n.t("pipeline.merge_failed"), fb)
                 return 1

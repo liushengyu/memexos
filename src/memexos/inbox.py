@@ -585,16 +585,17 @@ def apply(cfg) -> int:
             raws = C._cited_raws(stage) + [r for it in q for r in rawref.find(it["body"], names, stage.dir)]
             outcome, dirs, rep = C.review_loop(cfg, stage, w, list(dict.fromkeys(r for r in raws if not r.startswith("raw/assets/"))), "fix",
                                                "fix_passed", "inbox", fix_prompt_key="rework_again", what=i18n.t("inbox.what"))
-            if outcome == "unavailable":
+            if outcome in ("unavailable", "writer-failed"):    # temporary: the items go back to the queue
                 requeue()
-                stage.discard(i18n.t("pipeline.gate2_unavailable"))
+                stage.discard(i18n.t("pipeline.gate2_unavailable") if outcome == "unavailable" else w.report)
                 return 1
             if outcome not in ("passed", "off"):
                 requeue()
                 stage.hold(i18n.t("inbox.review_failed"), [], json.dumps(rep.get("errors"), ensure_ascii=False, indent=1))
                 return 1
+        from memexos.pipeline import fixqueue
         from memexos.pipeline.stage import add_to_ledger
-        add_to_ledger(stage.dir, "fixed-reviews.txt", [d.name for d in dirs])
+        add_to_ledger(stage.dir, "fixed-reviews.txt", fixqueue.verified(dirs))    # the last round's minor problems wait for `memex fix`
         if not stage.publish(f"inbox: {len(q)} items"):
             requeue()
             return 1

@@ -9,6 +9,7 @@ import pytest
 from memexos import events, backends, config, scaffold
 from memexos.backends.base import Backend, Result
 from memexos.pipeline import compile as C
+from memexos.pipeline import fixqueue
 from memexos.pipeline.stage import ledger
 
 
@@ -107,7 +108,8 @@ def test_review_failure_goes_back_to_writer_then_publishes(vault):
     assert C.ingest(cfg) == 0
     assert any("independent reviewer" in c for c in FakeWriter.calls)     # the problems went back to the writer
     assert ledger(vault, "ingested.txt")
-    assert len(ledger(vault, "fixed-reviews.txt")) == 1                   # the failed round was handled by the rework
+    # the failed round's flagged sentence is not on any page the rework changed, so it stays for `memex fix`
+    assert not ledger(vault, "fixed-reviews.txt") and len(C.unfixed_reviews(cfg)) == 2
 
 
 def test_writing_into_raw_is_held_not_published(vault):
@@ -212,3 +214,106 @@ def test_lint_that_fails_review_is_held(vault, monkeypatch):
     assert C.lint(cfg) == 1
     assert (vault / "wiki" / "sources" / "example-source1.md").read_text() == before   # nothing unreviewed reached the vault
     assert "auto-lint:" not in git(vault, "log", "--format=%s")
+
+
+# ---------------------------------------------------------------- the fix queue: nothing dropped, nothing wrongly held
+PAGE = "wiki/sources/example-source1.md"
+REWRITTEN = "A summary of the source that is long enough to count as a page body for gate one"   # the fake rework edits it
+UNTOUCHED = "raw/2026-01-01-web-example-source1.md"                                           # the rework leaves it
+
+
+def reviews(monkeypatch, *rounds):
+    """Script the reviewer: each round is a list of (verdict, critical, claim) on PAGE; a round with a bad claim fails."""
+    script = list(rounds)
+
+    def structured(self, prompt, schema, **kw):
+        claims = [{"page": PAGE, "claim": c, "critical": crit, "evidence": "e", "raw_location": "raw/x.md:1", "reason": "r",
+                   "verdict": v} for v, crit, c in (script.pop(0) if script else [])]
+        return Result(ok=True, backend=self.name, result={"key_points": [], "claims": claims, "overwrites": [], "injections": [],
+                                                          "integration_notes": [], "notes_on_eval": ""})
+    monkeypatch.setattr(FakeReviewer, "structured", structured)
+
+
+def test_a_rewritten_flagged_sentence_settles_the_failed_round(vault, monkeypatch):
+    reviews(monkeypatch, [("UNSUPPORTED", True, REWRITTEN)], [])
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 0
+    first = [d for d in sorted((cfg.paths.state / "gate2").iterdir()) if "-fix" not in d.name][0]
+    assert (first / "pages.tgz").exists()
+    assert first.name in ledger(vault, "fixed-reviews.txt")              # the re-review checked the rewritten sentence
+
+
+def test_an_untouched_flagged_sentence_stays_for_fix(vault, monkeypatch):
+    reviews(monkeypatch, [("UNSUPPORTED", True, REWRITTEN), ("CONTRADICTED", True, UNTOUCHED)], [])
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 0
+    first = [d for d in sorted((cfg.paths.state / "gate2").iterdir()) if "-fix" not in d.name][0]
+    assert first.name not in ledger(vault, "fixed-reviews.txt")
+    left = fixqueue.live(first)
+    assert [p["wiki"] for p in left] == [UNTOUCHED]                       # only the problem nobody looked at again
+
+
+def test_a_usage_limit_during_rework_requeues_instead_of_holding(vault, monkeypatch):
+    reviews(monkeypatch, [("UNSUPPORTED", True, REWRITTEN)])
+    real = FakeWriter.agent
+
+    def limited_on_rework(self, prompt, **kw):
+        if "independent reviewer" in prompt:
+            return Result(ok=False, backend=self.name, limited=True, tail="usage limit reached")
+        return real(self, prompt, **kw)
+    monkeypatch.setattr(FakeWriter, "agent", limited_on_rework)
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 1
+    assert not ledger(vault, "held.txt") and not ledger(vault, "ingested.txt")    # still queued
+    assert "staging/" not in git(vault, "branch")                                # the attempt was thrown away
+    assert not list((vault / "inbox").glob("*-blocked.md"))
+
+
+def test_other_writer_failures_hold_after_three_in_a_row(vault, monkeypatch):
+    monkeypatch.setattr(FakeWriter, "agent", lambda self, prompt, **kw: Result(ok=False, backend=self.name, tail="crashed"))
+    cfg = cfg_for(vault)
+    for i in range(1, 4):
+        assert C.ingest(cfg) == 1
+        assert bool(ledger(vault, "held.txt")) == (i == 3), i
+
+
+def test_fix_keeps_the_last_rounds_minor_problems_and_records_the_rest(vault, monkeypatch):
+    reviews(monkeypatch, [("PARTIAL", False, REWRITTEN)])                 # passes, with one minor problem
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 0
+    queued = C.unfixed_reviews(cfg)
+    assert len(queued) == 1
+    reviews(monkeypatch, [("PARTIAL", False, "A summary of the source (fixed)")])   # the fix passes with another minor one
+    assert C.fix(cfg) == 0
+    done = ledger(vault, "fixed-reviews.txt")
+    assert queued[0].name in done                                        # what the fix worked on is recorded
+    left = C.unfixed_reviews(cfg)
+    assert len(left) == 1 and left[0].name not in done and "-fix" in left[0].name   # the new minor problem waits
+
+
+def test_fix_records_reviews_of_compiles_that_were_never_published(vault, monkeypatch):
+    FakeWriter.mode = "touch-raw"                                        # gate 1 holds the compile...
+    cfg = cfg_for(vault)
+    assert C.ingest(cfg) == 1
+    # ...a review of that branch (as if it had been reviewed before being held) must not send anyone to fix it
+    branch = [b for b in git(vault, "branch", "--list", "staging/*", "--format=%(refname:short)").split() if b][0]
+    d = cfg.paths.state / "gate2" / f"2026-01-01-{branch.replace('/', '_')}"
+    d.mkdir(parents=True)
+    (d / "review.json").write_text('{"claims": [{"page": "wiki/sources/a.md", "claim": "c", "critical": true, "evidence": "",'
+                                   ' "raw_location": "", "reason": "r", "verdict": "CONTRADICTED"}], "overwrites": [],'
+                                   ' "injections": [], "key_points": [], "integration_notes": []}')
+    settle, todo = fixqueue.queue(cfg)
+    assert (d.name, "not published") in settle and not todo
+
+
+def test_fix_takes_the_worst_problems_first(vault, monkeypatch):
+    cfg = cfg_for(vault)
+    root = cfg.paths.state / "gate2"
+    for name, verdict in (("2026-01-01-backfill_a", "PARTIAL"), ("2026-01-02-backfill_b", "CONTRADICTED")):
+        (root / name).mkdir(parents=True)
+        (root / name / "review.json").write_text(
+            '{"claims": [{"page": "wiki/sources/a.md", "claim": "c", "critical": true, "evidence": "", "raw_location": "",'
+            f' "reason": "r", "verdict": "{verdict}"}}], "overwrites": [], "injections": [], "key_points": [], "integration_notes": []}}')
+    cfg.data["pipeline"]["fix_max_problems"] = 1
+    _, picked, n = fixqueue.pick(cfg)
+    assert [d.name for d in picked] == ["2026-01-02-backfill_b"] and n == 1       # the newer but worse one first

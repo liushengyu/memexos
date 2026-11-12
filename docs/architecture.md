@@ -136,7 +136,18 @@ pending and wait for the person's decision in the inbox (`memex catalog drafts`)
    person to look at, the raw files are not retried automatically, and the inbox says why.
 
 If the reviewer cannot run (quota, network), the batch is discarded and compiling pauses for a while: nothing
-unreviewed is ever published. Minor problems in a passing review are recorded and repaired later by `memex fix`.
+unreviewed is ever published. If the writer does not finish (a usage limit, the network, a crash), the attempt is
+thrown away and the raw files stay queued: that is not a quality problem, so nothing is held for it. Only a writer that
+fails `writer_failures_hold` times in a row for another reason gets its files held, and every call records the model
+that actually ran (a call that ran a different model family than the one configured is discarded).
+
+Minor problems in a passing review are repaired later by `memex fix`, which nothing is allowed to skip:
+
+- each review keeps a snapshot of the pages it read; a failed round counts as handled only for the problems whose
+  sentence the rework changed (the re-review checked those), the rest stays queued;
+- the last review of a fix, inbox or correct run is recorded as done only when it found nothing;
+- `memex fix` takes the worst problems first (about `fix_max_problems` per run) and records reviews of compiles that
+  never reached the main branch without fixing anything.
 
 `memex lint` (weekly) reorganizes and repairs the wiki as a whole; like every change it passes gate 1 and gate 2 (reviewed against the sources the changed pages cite) before it is published. Gate 1 treats a link that almost matches an existing page name (a typo, a quote style, a plural) as an error; a link to a page still to be written is a warning, and the console lists those names. `memex correct` applies feedback from
 `raw/feedback/` to exactly the sentences it targets, then reviews the change.
