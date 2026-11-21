@@ -16,6 +16,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import re
 import select
 import shutil
 import subprocess
@@ -24,6 +25,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from memexos import i18n
 from memexos.util import atomic_write
 
 MAC_APPS = ["Google Chrome", "Chromium", "Microsoft Edge", "Brave Browser", "Google Chrome for Testing"]
@@ -283,6 +285,29 @@ class Browser:
                 self.call("Target.closeTarget", targetId=tid, timeout=10)
             except BrowserError:
                 pass
+
+
+PLAYWRIGHT = "playwright@1.64"     # the version install.sh uses to download Chrome for Testing
+
+
+def start_problem(exe: str) -> str:
+    """Why this browser cannot start for MemexOS, "" when it starts: a real headless start with the flags MemexOS uses
+    (the sandbox fallback included), on a throwaway profile. Finding the file is not enough: Chrome for Testing installed
+    without its system libraries (a non-interactive install as a normal user on Linux) exists but cannot run."""
+    with tempfile.TemporaryDirectory(prefix="memex-browser-check-") as tmp:
+        try:
+            with Browser(exe, profile=Path(tmp), headless=True):
+                return ""
+        except (BrowserError, OSError) as e:
+            return str(e)[-400:] or "the browser exited"
+
+
+def start_hint(problem: str) -> str:
+    """What to do about a start problem, in the current language."""
+    m = re.search(r"error while loading shared libraries: (\S+?):", problem)
+    if m:
+        return i18n.t("doctor.hint.browser_libs", lib=m.group(1), playwright=PLAYWRIGHT)
+    return i18n.t("doctor.hint.browser_start", why=problem[-200:])
 
 
 def user_agent(exe: str, profile: Path | None = None) -> str:

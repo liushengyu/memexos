@@ -106,7 +106,9 @@ def checks(cfg) -> list[dict]:
     sites = [s for s in cookies.SITES if cfg.get(f"plugins.{s}.enabled") and cookies.source(cfg, s)]
     if any(cookies.source(cfg, s) == "memex" for s in sites):
         exe = login_browser.find(cfg)
-        add(cap, i18n.t("doctor.login_browser", path=exe or "-"), exe, False, hint("browser"))
+        problem = login_browser.start_problem(exe) if exe else ""
+        add(cap, i18n.t("doctor.login_browser", path=exe or "-"), bool(exe) and not problem, False,
+            login_browser.start_hint(problem) if problem else hint("browser"))
     for s in sites:
         line = cookies.status(cfg, s)
         add(cap, line, s not in cookies.needs_login(cfg), False, f"memex login {s}")
