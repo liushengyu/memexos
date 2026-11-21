@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-name = Path(sys.argv[0]).name
+name = os.environ.get("FAKE_CLI_NAME") or Path(sys.argv[0]).name      # set by wrappers that run this file directly
 args = sys.argv[1:]
 reply = json.loads(os.environ.get("FAKE_CLI_REPLY") or "{}")
 logged_in = reply.get(f"{name}_logged_in", reply.get("logged_in", True))
@@ -39,7 +39,7 @@ if name == "claude":
         sys.exit(0)
     out = {"type": "result", "is_error": reply.get("is_error", False), "result": reply.get("result", "done"),
            "num_turns": 2, "total_cost_usd": 0.0123, "permission_denials": reply.get("denials", []),
-           "modelUsage": {"claude-test-model": {"inputTokens": 100, "outputTokens": 20, "cacheReadInputTokens": 0,
+           "modelUsage": {reply.get("model", "claude-test-model"): {"inputTokens": 100, "outputTokens": 20, "cacheReadInputTokens": 0,
                                                 "cacheCreationInputTokens": 0}}}
     if "structured" in reply:
         out["structured_output"] = reply["structured"]

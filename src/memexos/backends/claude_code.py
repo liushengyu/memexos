@@ -8,12 +8,13 @@ not fail the run; they are returned in Result.denials so callers can log what ca
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
 from memexos import i18n
 from memexos.backends.base import (LOGIN_TTL, NETWORK_RE, QUOTA_RE, READ_ONLY_NOTE, SECRET_PATHS, TRANSIENT_STATUS, Backend, Policy,
-                                   Result, parse_json_text)
+                                   Result, parse_json_text, start_failure)
 from memexos.util import proxy_env, run, which
 
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
@@ -41,6 +42,13 @@ def _rule(p) -> str:
     """A permission-rule path: "//abs/path/**" for a directory (Claude Code reads "//" as an absolute path)."""
     p = Path(p).resolve()
     return f"/{p}/**" if p.is_dir() or not p.suffix else f"/{p}"
+
+
+def same_family(want: str, used: str) -> bool:
+    """'opus', 'opus[1m]', 'claude-opus-5-5' all ask for an Opus model; a full id must match the family it names."""
+    w = re.sub(r"\[.*\]$", "", want).lower()
+    family = next((f for f in ("opus", "sonnet", "haiku") if f in w), w)
+    return family in used.lower()
 
 
 class ClaudeCode(Backend):
@@ -74,8 +82,15 @@ class ClaudeCode(Backend):
         given the benefit of the doubt."""
         try:
             r = run([exe, "auth", "status", "--json"], env=self.env(), timeout=30)
+        except OSError as e:
+            return False, i18n.t("backend.cannot_start", cmd=exe, why=start_failure(error=e))
+        except Exception:  # noqa: BLE001 — a timeout: cannot tell
+            return True, ""
+        if start_failure(r):
+            return False, i18n.t("backend.cannot_start", cmd=exe, why=start_failure(r))
+        try:
             j = json.loads(r.stdout or "{}")
-        except Exception:  # noqa: BLE001 — no such subcommand, or no JSON: cannot tell
+        except ValueError:      # an older CLI without `auth status --json`: cannot tell
             return True, ""
         if j.get("loggedIn") is False:
             return False, i18n.t("backend.not_logged_in", cmd="claude", login="claude auth login") + \
@@ -109,10 +124,14 @@ class ClaudeCode(Backend):
             return res
         text = str(j.get("result") or "")
         res.text = text
-        mu = next(iter((j.get("modelUsage") or {}).items()), (None, {}))
-        if mu[0]:
-            res.model = res.model or mu[0]
-        u = mu[1] or {}
+        mu = j.get("modelUsage") or {}
+        # The model that did the work (the one with the most output; small helper models may be listed too). Recorded
+        # as what actually ran, not what was asked for: an unset model follows the CLI's default, and that default
+        # can change with the login method.
+        used = max(mu, key=lambda k: (mu[k] or {}).get("outputTokens", 0)) if mu else ""
+        if used:
+            res.model = used
+        u = mu.get(used) or {}
         res.usage = {"input_tokens": u.get("inputTokens", 0), "cache_read_tokens": u.get("cacheReadInputTokens", 0),
                      "cache_write_tokens": u.get("cacheCreationInputTokens", 0), "output_tokens": u.get("outputTokens", 0),
                      "turns": j.get("num_turns")}
@@ -124,6 +143,10 @@ class ClaudeCode(Backend):
             res.tail = text[-600:]
             res.limited = bool(QUOTA_RE.search(text))
             res.transient = not res.limited and (j.get("api_error_status") in TRANSIENT_STATUS or bool(NETWORK_RE.search(text)))
+            return res
+        want = str(self.section.get("model") or "")
+        if used and want and not same_family(want, used):
+            res.tail = f"model mismatch: configured {want}, the CLI ran {used}; the result is discarded"
             return res
         if schema is not None:
             res.result = j.get("structured_output")

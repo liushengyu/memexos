@@ -118,6 +118,20 @@ def test_claude_denials_and_errors_are_reported(fake, tmp_path):
     assert not r.ok and r.limited
 
 
+def test_claude_records_the_model_that_ran_and_rejects_another_family(fake, tmp_path):
+    cfg, calls, reply = fake
+    reply(result="done", model="claude-sonnet-5")
+    r = backends.get(cfg, "claude-code").agent("x", cwd=tmp_path, workdir=tmp_path / "run", policy=Policy())
+    assert r.ok and r.model == "claude-sonnet-5"                        # no model configured: record what ran
+    cfg.data["backends"]["claude-code"]["model"] = "opus"
+    r = backends.get(cfg, "claude-code").agent("x", cwd=tmp_path, workdir=tmp_path / "run2", policy=Policy())
+    assert not r.ok and "model mismatch" in r.tail and r.model == "claude-sonnet-5"
+    assert flag_value(calls("claude")[-1]["argv"], "--model") == "opus"
+    reply(result="done", model="claude-opus-5-5[1m]")
+    r = backends.get(cfg, "claude-code").agent("x", cwd=tmp_path, workdir=tmp_path / "run3", policy=Policy())
+    assert r.ok and r.model == "claude-opus-5-5[1m]"
+
+
 def test_claude_not_logged_in_hands_over_to_the_next_backend(fake, tmp_path):
     cfg, calls, reply = fake
     reply(claude_logged_in=False, structured={"ok": True})

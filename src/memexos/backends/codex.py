@@ -21,7 +21,7 @@ import tomllib
 from pathlib import Path
 
 from memexos import i18n
-from memexos.backends.base import LOGIN_TTL, NETWORK_RE, QUOTA_RE, READ_ONLY_NOTE, Backend, Policy, Result
+from memexos.backends.base import LOGIN_TTL, NETWORK_RE, QUOTA_RE, READ_ONLY_NOTE, Backend, Policy, Result, start_failure
 from memexos.util import proxy_env, run, which
 
 
@@ -90,13 +90,18 @@ class Codex(Backend):
         hit = Codex._login.get(exe)
         if hit and hit[1] and time.time() - hit[0] < LOGIN_TTL:
             return True, ""
+        why = ""
         try:
             r = run([exe, "login", "status"], env=proxy_env(None, _proxy(self.section)), timeout=30)
             out = (r.stdout + r.stderr).lower()
             ok = r.returncode == 0 and "not logged in" not in out
-        except Exception:  # noqa: BLE001 — cannot tell; let the run itself report
+            if start_failure(r):
+                why = i18n.t("backend.cannot_start", cmd=exe, why=start_failure(r))
+        except OSError as e:
+            ok, why = False, i18n.t("backend.cannot_start", cmd=exe, why=start_failure(error=e))
+        except Exception:  # noqa: BLE001 — a timeout: cannot tell; let the run itself report
             ok = True
-        why = "" if ok else i18n.t("backend.not_logged_in", cmd="codex", login="codex login")
+        why = why or ("" if ok else i18n.t("backend.not_logged_in", cmd="codex", login="codex login"))
         Codex._login[exe] = (time.time(), ok, why)
         return ok, why
 
