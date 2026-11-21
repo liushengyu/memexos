@@ -27,10 +27,18 @@ def language() -> str:
 
 
 @functools.cache
-@functools.cache
 def available() -> tuple[str, ...]:
     return tuple(sorted(p.name[:-5] for p in resources.files("memexos").joinpath("locale").iterdir()
                         if p.name.endswith(".toml")))
+
+
+@functools.cache
+def full() -> tuple[str, ...]:
+    """Languages a knowledge base can be in: a pack that also has its own prompts and vault templates. A pack with only
+    some messages (the console's, say) can still be the console's display language, but not the knowledge base's:
+    the writer and the reviewer would get another language's prompts."""
+    root = resources.files("memexos")
+    return tuple(lg for lg in available() if root.joinpath("prompts", lg).is_dir() and root.joinpath("templates", "vault", lg).is_dir())
 
 
 @functools.cache

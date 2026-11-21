@@ -6,7 +6,8 @@
 # example MEMEX_SEARCH__RERANK=none. Secrets are never stored here: settings
 # such as api_key_env name the environment variable that holds the secret.
 
-# Language of prompts, logs, the console and taxonomy labels: "en" or "zh".
+# The knowledge base's language: prompts, logs, taxonomy labels, the vault's templates, and (with
+# search.qmd.embed_model = "auto") the search model: "en" or "zh". The console can show another one: [console] language.
 language = "en"
 
 [vault]
@@ -316,5 +317,8 @@ nightly = ["visual", "classify", "catalog-sync", "eval-cover", "usage-judge", "u
 [console]
 host = "127.0.0.1"
 port = 8765
+# The console's display language: any language pack (en, es, zh). Empty = the knowledge base's language. Changing it,
+# here or with the settings button, never changes the knowledge base's language.
+language = ""
 # Show what your coding agents remember about you (Claude Code auto-memory).
 profile_page = false

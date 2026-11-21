@@ -192,7 +192,13 @@ class Config:
     @property
     def language(self) -> str:
         lang = str(self.get("language", "en")).lower()
-        return lang if lang in i18n.available() else i18n.FALLBACK
+        return lang if lang in i18n.full() else i18n.FALLBACK
+
+    @property
+    def console_language(self) -> str:
+        """The console's display language ([console] language): any language pack; empty = the knowledge base's."""
+        lang = str(self.get("console.language") or "").lower()
+        return lang if lang in i18n.available() else self.language
 
     @property
     def vault(self) -> Path:

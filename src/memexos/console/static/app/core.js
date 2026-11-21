@@ -496,8 +496,15 @@ $("#cmdk input").addEventListener("keydown", e => { if (e.key === "ArrowDown") {
   else if (e.key === "Enter") { e.preventDefault(); const on = $("#cmdk .ci.on"); if (!on) return; const r = on.getBoundingClientRect(); Cmdk.pick(Cmdk.idx, {clientX: r.left + 40, clientY: r.top + 10}); } });
 $("#cmdk .res").addEventListener("click", e => { const c = e.target.closest(".ci"); if (c) Cmdk.pick(+c.dataset.i, e); });
 $("#cmdk-btn").onclick = () => Cmdk.show();
-// settings: the languages come from the server (BOOT.langs = i18n.available()), never a list kept here
+// settings: the languages come from the server (BOOT.langs = i18n.available()), never a list kept here. Only the
+// console's display language changes ([console] language); the knowledge base keeps its own
 const LANG_NAME = {en: "English", es: "Español", zh: "中文"};
+$("#set-btn").onkeydown = e => {     // a role="button" element: Enter and Space work like a click
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault();
+  const r = $("#set-btn").getBoundingClientRect();
+  $("#set-btn").onclick({clientX: r.left + r.width / 2, clientY: r.top + r.height / 2});
+};
 $("#set-btn").onclick = async e => {
   const langs = (BOOT.langs && BOOT.langs.length) ? BOOT.langs : [LANG];
   const pick = await modal({

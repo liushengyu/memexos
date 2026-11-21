@@ -79,15 +79,14 @@ def set_language(cfg, lang: str) -> tuple[bool, str]:
     lang = (lang or "").strip()
     if lang not in i18n.available():
         return False, i18n.t("console.msg.unknown")
+    from memexos.setup import toml_set
     ucfg = config_mod.user_config_path()
     try:
         text = ucfg.read_text(encoding="utf-8") if ucfg.exists() else config_mod.default_config_text()
     except OSError:
         return False, i18n.t("console.msg.cannot_save")
-    if re.search(r"(?m)^language\s*=", text):
-        text = re.sub(r'(?m)^language\s*=.*$', f'language = "{lang}"', text, count=1)
-    else:
-        text = f'language = "{lang}"\n' + text
+    # [console] language only: the knowledge base's own `language` (prompts, search model) is not the console's to change
+    text = toml_set(text, "console", "language", lang)
     ucfg.parent.mkdir(parents=True, exist_ok=True)
     tmp = ucfg.with_suffix(".toml.tmp")
     tmp.write_text(text, encoding="utf-8")

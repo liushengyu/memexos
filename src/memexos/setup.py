@@ -181,7 +181,7 @@ def say(key: str, **kw) -> None:
 def cmd_setup(loader, argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="memex setup", description="Set up MemexOS: models, keys, search, collection, scheduling.")
     ap.add_argument("--yes", "-y", action="store_true", help="accept the detected defaults (no questions)")
-    ap.add_argument("--lang", choices=i18n.available())
+    ap.add_argument("--lang", choices=i18n.full())
     ap.add_argument("--vault", help="where the knowledge base lives (default ~/memex)")
     ap.add_argument("--sample", action=argparse.BooleanOptionalAction, default=None, help="start with the sample content")
     for r in ROLES:
@@ -207,7 +207,7 @@ def cmd_setup(loader, argv: list[str]) -> int:
     lang = a.lang or (cfg0.language if config_mod.user_config_path().exists() else ("zh" if os.environ.get("LANG", "").startswith("zh") else "en"))
     if not a.lang and not ask.yes:
         lang = ask.text("lang", lang)
-        lang = lang if lang in i18n.available() else "en"
+        lang = lang if lang in i18n.full() else "en"
     i18n.set_language(lang)
     say("title")
 

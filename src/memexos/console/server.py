@@ -185,6 +185,7 @@ class Server(ThreadingHTTPServer):
 
 
 def serve(cfg) -> int:
+    i18n.set_language(cfg.console_language)       # this process only renders the console; jobs it starts use their own
     con = Console(cfg)
     try:
         srv = Server((con.host, con.port), handler(con))

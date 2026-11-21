@@ -857,7 +857,7 @@ settings_tip = "Language and other preferences"
 [console.set]
 title = "Settings"
 language = "Language"
-language_hint = "The console reloads in the chosen language."
+language_hint = "The console reloads in the chosen language. The knowledge base keeps its own language (the prompts models get, the search model)."
 
 [console.cmd]
 placeholder = "Find a page, go to a view, run an action…"

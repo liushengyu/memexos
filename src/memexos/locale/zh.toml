@@ -854,7 +854,7 @@ settings_tip = "语言和其他偏好"
 [console.set]
 title = "设置"
 language = "语言"
-language_hint = "控制台会按所选语言重新加载。"
+language_hint = "控制台会按所选语言重新加载。知识库自己的语言（给模型的指令、检索用的模型）不变。"
 
 [console.cmd]
 placeholder = "找页面、跳到某一页、执行操作…"
