@@ -60,7 +60,7 @@ def cmd_init(cfg_loader, argv: list[str]) -> int:
     from memexos import scaffold
     ap = argparse.ArgumentParser(prog="memex init", description="Create a knowledge base and your settings.")
     ap.add_argument("path", nargs="?", help="where to create it (default: vault.path from your settings, ~/memex)")
-    ap.add_argument("--lang", choices=i18n.available(), help="language of prompts, logs and the console")
+    ap.add_argument("--lang", choices=i18n.full(), help="the knowledge base's language: prompts, logs, templates")
     ap.add_argument("--no-user-config", action="store_true", help="do not write ~/.config/memexos/config.toml")
     ap.add_argument("--sample", action="store_true", help="start with the sample content (three sources, compiled, with evaluation questions)")
     a = ap.parse_args(argv)

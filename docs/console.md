@@ -10,8 +10,10 @@ memex console serve        run in the foreground (the scheduler's console job us
 memex console stop | restart | status
 ```
 
-Settings: `console.host`, `console.port` (8765), `console.profile_page` (off). The language follows the vault's
-`language` setting.
+Settings: `console.host`, `console.port` (8765), `console.profile_page` (off), `console.language`. The display
+language is `console.language`, any language pack (English, Chinese, Spanish); empty follows the vault's `language`.
+The settings button (⚙) in the top bar changes `console.language` only: the vault's `language`, which decides the
+prompts, the templates and the search model, stays as it is.
 
 To look around without data of your own, build the demo installation used for the README screenshots: a generated
 knowledge base of about 200 pages with two weeks of simulated activity, in a separate home directory, calling no model:
