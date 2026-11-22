@@ -380,13 +380,28 @@ def cmd_cookies(loader, argv: list[str]) -> int:
 
 def cmd_login(loader, argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="memex login", description=i18n.t("cookies.login_help"))
-    ap.add_argument("site", choices=list(SITES))
+    ap.add_argument("site", nargs="?", choices=list(SITES))
+    ap.add_argument("--check", action="store_true", help=i18n.t("cookies.opt_check"))
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--from-browser", metavar="NAME", help=i18n.t("cookies.opt_from_browser"))
     g.add_argument("--cookies", metavar="FILE", help=i18n.t("cookies.opt_cookies"))
     ap.add_argument("--timeout", type=int, default=LOGIN_TIMEOUT, help=i18n.t("cookies.opt_timeout"))
     a = ap.parse_args(argv)
     cfg = loader()
+    if a.check:          # does the browser for logins start here? (the installer and doctor ask the same)
+        from memexos.capture import browser
+        exe = browser.find(cfg)
+        if not exe:
+            print(i18n.t("doctor.hint.browser"), file=sys.stderr)
+            return 1
+        problem = browser.start_problem(exe)
+        if problem:
+            print(browser.start_hint(problem), file=sys.stderr)
+            return 1
+        print(i18n.t("cookies.browser_starts", path=exe))
+        return 0
+    if not a.site:
+        ap.error(i18n.t("cookies.need_site"))
     if source(cfg, a.site) not in ("memex", ""):
         print(i18n.t("cookies.login_other_source", site=a.site, source=source(cfg, a.site)))
     try:

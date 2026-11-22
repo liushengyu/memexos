@@ -137,6 +137,11 @@ install_cli() {   # claude | codex
   esac
 }
 
+browser_starts() {   # finding the file is not enough: Chrome for Testing without its system libraries exists but cannot run
+  if browser_why="$(memex login --check 2>&1 </dev/null)"; then ok "browser for logins: $1"
+  else note "the browser for logins is installed but does not start. $browser_why"; fi
+}
+
 login_cli() {   # claude | codex: the login opens a page in your browser
   case "$1" in
     claude)
@@ -371,7 +376,7 @@ if want video || want pdf || want social; then
   if want social; then
     if has twitter; then ok "twitter-cli"
     else uv tool install -q twitter-cli </dev/null && ok "twitter-cli" || note "twitter-cli did not install (uv tool install twitter-cli)"; fi
-    if b="$(find_browser)"; then ok "browser for logins: $b"
+    if b="$(find_browser)"; then browser_starts "$b"
     else
       info "No Chrome, Chromium, Edge or Brave found. Installing Chrome for Testing (about 150 MB) for MemexOS's logins only;"
       info "it lives in $SHARE/browsers and is not your everyday browser."
@@ -382,7 +387,7 @@ if want video || want pdf || want social; then
         elif [ -n "$TTY" ] && ask "Install the system libraries the browser needs (uses sudo)?" y; then deps="--with-deps"; input="$TTY"; fi
       fi
       if PLAYWRIGHT_BROWSERS_PATH="$SHARE/browsers" npx -y "$PLAYWRIGHT" install $deps chromium <"$input"; then
-        if b="$(find_browser)"; then ok "browser for logins: $b"; else note "the browser did not install"; fi
+        if b="$(find_browser)"; then browser_starts "$b"; else note "the browser did not install"; fi
       else note "the browser did not install; install Chrome, Chromium, Edge or Brave and run 'memex login <site>'"; fi
     fi
   fi

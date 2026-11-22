@@ -91,6 +91,8 @@ asr_model = "下载一个 ggml 模型（如 ggml-large-v3-turbo-q5_0.bin）并�
 pdftotext = "brew install poppler，或 apt install poppler-utils"
 twitter = "uv tool install twitter-cli（x 插件要用）"
 browser = "安装脚本可以装 Chrome for Testing；也可以自己装 Chrome、Chromium、Edge 或 Brave，或设置 [browser] command"
+browser_libs = "浏览器启动不了：缺它要用的系统库（{lib}）。运行一次：sudo npx -y {playwright} install-deps chromium"
+browser_start = "浏览器装了但启动不了：{why}"
 
 [help]
 admin = """维护命令（一般由定时任务调用，也可以手动运行）
@@ -435,6 +437,9 @@ missing = "未下载"
 not_ok = "还缺模型：{why}。再运行一次 memex models pull；在此之前检索用全文索引照常工作。"
 
 [cookies]
+opt_check = "只检查网站登录用的浏览器在这台机器上能不能启动"
+browser_starts = "网站登录用的浏览器能启动：{path}"
+need_site = "写上站点（x、youtube、bilibili），或者用 --check"
 help = "查看或续期 MemexOS 用来采集 X、B 站、YouTube 的登录。`refresh` 立刻续期：在 MemexOS 自己的浏览器资料里无窗口地打开网站，所以 Agent 和定时任务都能运行它；网站已经让登录失效时会明确说出来，这时需要 `memex login <站点>`。"
 login_help = "为 MemexOS 登录一个网站。会在 MemexOS 自己的浏览器资料里打开一个窗口，停在网站的登录页；在里面登录，登录完成后窗口自动关闭。之后 MemexOS 自己保持登录有效。Agent 可以运行这个命令：窗口会出现在电脑前的人面前。没有屏幕的机器上用 --cookies 或 --from-browser。"
 opt_from_browser = "改为从这个日常浏览器复制登录（chrome、firefox、edge、brave、safari…；需要 yt-dlp）"

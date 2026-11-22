@@ -79,3 +79,19 @@ def test_doctor_json_is_only_json(home, monkeypatch, capsys):
     out = capsys.readouterr().out
     rows = json.loads(out)
     assert isinstance(rows, list) and all({"section", "label", "ok", "required", "hint"} <= set(r) for r in rows)
+
+
+def test_a_login_browser_that_cannot_start_is_reported_with_the_fix(home, tmp_path, monkeypatch, capsys):
+    # Chrome for Testing without its system libraries: the file exists, the program cannot run
+    from memexos.capture import browser
+    from memexos.cli import main
+    fake = tmp_path / "chrome"
+    fake.write_text("#!/bin/sh\necho \"$0: error while loading shared libraries: libatk-1.0.so.0: cannot open shared object file\" >&2\nexit 127\n")
+    fake.chmod(0o755)
+    problem = browser.start_problem(str(fake))
+    assert "libatk-1.0.so.0" in problem
+    assert "install-deps chromium" in browser.start_hint(problem) and "libatk-1.0.so.0" in browser.start_hint(problem)
+    monkeypatch.setenv("MEMEX_VAULT", str(home / "v"))
+    monkeypatch.setenv("MEMEX_BROWSER__COMMAND", str(fake))
+    assert main(["login", "--check"]) == 1
+    assert "install-deps chromium" in capsys.readouterr().err
