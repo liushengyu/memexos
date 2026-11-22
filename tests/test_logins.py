@@ -55,6 +55,11 @@ def exe():
         if ORIGINAL_ENV.get("MEMEX_REAL_BROWSER") == "1":
             pytest.fail("a Chromium-family browser is required here (MEMEX_REAL_BROWSER=1) but none was found")
         pytest.skip("no Chrome, Chromium, Edge or Brave installed")
+    problem = B.start_problem(found)
+    if problem:          # installed but cannot run here (system libraries missing, say): say why instead of failing
+        if ORIGINAL_ENV.get("MEMEX_REAL_BROWSER") == "1":
+            pytest.fail(f"the browser required here (MEMEX_REAL_BROWSER=1) does not start: {problem}")
+        pytest.skip(f"{found} does not start here: {problem}")
     return found
 
 

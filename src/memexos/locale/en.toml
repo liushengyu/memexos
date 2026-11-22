@@ -91,6 +91,8 @@ asr_model = "download a ggml model such as ggml-large-v3-turbo-q5_0.bin and set 
 pdftotext = "brew install poppler, or apt install poppler-utils"
 twitter = "uv tool install twitter-cli (used by the x plugin)"
 browser = "the installer offers Chrome for Testing; or install Chrome, Chromium, Edge or Brave, or set [browser] command"
+browser_libs = "the browser cannot start: its system libraries are missing ({lib}). Install them once: sudo npx -y {playwright} install-deps chromium"
+browser_start = "the browser is installed but does not start: {why}"
 
 [help]
 admin = """Maintenance commands (normally run by the scheduler; you can run them by hand)
@@ -438,6 +440,9 @@ missing = "not downloaded"
 not_ok = "Some models are missing: {why}. Run memex models pull again; search works meanwhile with the full-text index."
 
 [cookies]
+opt_check = "only check that the browser for site logins starts here"
+browser_starts = "the browser for site logins starts: {path}"
+need_site = "name a site (x, youtube, bilibili), or use --check"
 help = "Show or renew the logins MemexOS uses for X, Bilibili and YouTube. `refresh` renews them now (it opens the site in MemexOS's own browser profile without a window, so agents and scheduled jobs can run it); when a site has ended the session it says so, and `memex login <site>` is needed."
 login_help = "Log in to a site for MemexOS. Opens a browser window on MemexOS's own profile at the site's login page; log in there and the window closes by itself. MemexOS then keeps the login alive on its own. Agents may run this: the window appears for the person at the computer. On a machine without a screen, use --cookies or --from-browser."
 opt_from_browser = "copy the login from this everyday browser instead (chrome, firefox, edge, brave, safari…; needs yt-dlp)"
